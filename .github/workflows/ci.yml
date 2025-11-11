@@ -1,0 +1,155 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: teaTraceCC/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./teaTraceCC
+        run: npm ci
+      
+      - name: Run linter
+        working-directory: ./teaTraceCC
+        run: npm run lint
+
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: teaTraceCC/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./teaTraceCC
+        run: npm ci
+      
+      - name: Run unit tests
+        working-directory: ./teaTraceCC
+        run: npm run test:coverage
+      
+      - name: Upload coverage reports
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./teaTraceCC/coverage/lcov.info
+          flags: unit
+          name: unit-tests
+          fail_ci_if_error: false
+
+  build:
+    name: Build Chaincode
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: teaTraceCC/package-lock.json
+      
+      - name: Install dependencies
+        working-directory: ./teaTraceCC
+        run: npm ci
+      
+      - name: Build chaincode
+        working-directory: ./teaTraceCC
+        run: npm run build
+      
+      - name: Check build output
+        working-directory: ./teaTraceCC
+        run: |
+          if [ ! -d "dist" ]; then
+            echo "Build failed: dist directory not found"
+            exit 1
+          fi
+          echo "Build successful"
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Run npm audit
+        working-directory: ./teaTraceCC
+        run: npm audit --audit-level=moderate || true
+      
+      - name: Check for vulnerabilities
+        working-directory: ./teaTraceCC
+        run: |
+          npm audit --json > audit.json || true
+          HIGH_VULNS=$(jq '.metadata.vulnerabilities.high // 0' audit.json)
+          CRITICAL_VULNS=$(jq '.metadata.vulnerabilities.critical // 0' audit.json)
+          
+          if [ "$CRITICAL_VULNS" -gt 0 ] || [ "$HIGH_VULNS" -gt 5 ]; then
+            echo "⚠️  Found critical or too many high vulnerabilities"
+            exit 1
+          fi
+
+  package:
+    name: Package Chaincode
+    runs-on: ubuntu-latest
+    needs: [build, security-scan]
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+      
+      - name: Install dependencies
+        working-directory: ./teaTraceCC
+        run: npm ci
+      
+      - name: Build chaincode
+        working-directory: ./teaTraceCC
+        run: npm run build
+      
+      - name: Package chaincode
+        working-directory: ./teaTraceCC
+        run: |
+          # Copy msp-config.json to dist
+          cp msp-config.json dist/ || echo "msp-config.json not found, skipping"
+          
+          # Create package directory
+          mkdir -p ../artifacts
+          
+          # Create tar.gz package (would need peer binary in CI)
+          echo "Chaincode built successfully"
+          echo "To package: peer lifecycle chaincode package teaTraceCC.tar.gz --path ./dist --lang node --label teaTraceCC_1.0"
+      
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: chaincode-dist
+          path: teaTraceCC/dist
+          retention-days: 7
+

@@ -1,0 +1,378 @@
+version: '3.8'
+
+networks:
+  fabric-network:
+    external: true
+
+volumes:
+  orderer.ibn.vn:
+  orderer1.ibn.vn:
+  orderer2.ibn.vn:
+  peer0.org1.ibn.vn:
+  peer1.org1.ibn.vn:
+  peer2.org1.ibn.vn:
+  couchdb0:
+  couchdb1:
+  couchdb2:
+
+services:
+  orderer.ibn.vn:
+    container_name: orderer.ibn.vn
+    image: hyperledger/fabric-orderer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=7050
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
+      - ORDERER_GENERAL_BOOTSTRAPFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=true
+      - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9443
+      - ORDERER_METRICS_PROVIDER=prometheus
+      - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: orderer
+    volumes:
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/msp:/var/hyperledger/orderer/msp
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls/:/var/hyperledger/orderer/tls
+      - ../config/orderer.yaml:/etc/hyperledger/fabric/orderer.yaml
+      - ../system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+      - orderer.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+      - 7050:7050
+      - 9443:9443
+    networks:
+      - fabric-network
+    healthcheck:
+      test: pgrep -f orderer > /dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  orderer1.ibn.vn:
+    container_name: orderer1.ibn.vn
+    image: hyperledger/fabric-orderer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=8050
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
+      - ORDERER_GENERAL_BOOTSTRAPFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=true
+      - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9447
+      - ORDERER_METRICS_PROVIDER=prometheus
+      - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: orderer
+    volumes:
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/msp:/var/hyperledger/orderer/msp
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/tls/:/var/hyperledger/orderer/tls
+      - ../config/orderer.yaml:/etc/hyperledger/fabric/orderer.yaml
+      - ../system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+      - orderer1.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+      - 8050:8050
+      - 9447:9447
+    networks:
+      - fabric-network
+    healthcheck:
+      test: pgrep -f orderer > /dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  orderer2.ibn.vn:
+    container_name: orderer2.ibn.vn
+    image: hyperledger/fabric-orderer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - FABRIC_LOGGING_SPEC=INFO
+      - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+      - ORDERER_GENERAL_LISTENPORT=9050
+      - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
+      - ORDERER_GENERAL_BOOTSTRAPFILE=/var/hyperledger/orderer/orderer.genesis.block
+      - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+      - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+      - ORDERER_GENERAL_TLS_ENABLED=true
+      - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+      - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+      - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+      - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+      - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9448
+      - ORDERER_METRICS_PROVIDER=prometheus
+      - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric
+    command: orderer
+    volumes:
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/msp:/var/hyperledger/orderer/msp
+      - ../organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/tls/:/var/hyperledger/orderer/tls
+      - ../config/orderer.yaml:/etc/hyperledger/fabric/orderer.yaml
+      - ../system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+      - orderer2.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+      - 9050:9050
+      - 9448:9448
+    networks:
+      - fabric-network
+    healthcheck:
+      test: pgrep -f orderer > /dev/null || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  peer0.org1.ibn.vn:
+    container_name: peer0.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer0.org1.ibn.vn
+      - CORE_PEER_ADDRESS=peer0.org1.ibn.vn:7051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+      - CORE_PEER_CHAINCODEADDRESS=peer0.org1.ibn.vn:7052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org1.ibn.vn:8051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.ibn.vn:7051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_OPERATIONS_LISTENADDRESS=0.0.0.0:9443
+      - CORE_METRICS_PROVIDER=prometheus
+      - CORE_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+    command: peer node start
+    volumes:
+      - /var/run/:/host/var/run/
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn/msp:/etc/hyperledger/fabric/msp
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn/tls/:/etc/hyperledger/fabric/tls
+      - peer0.org1.ibn.vn:/var/hyperledger/production
+      - ../config/core.yaml:/etc/hyperledger/fabric/core.yaml
+    ports:
+      - 7051:7051
+      - 7052:7052
+      - 9446:9443
+    networks:
+      - fabric-network
+    depends_on:
+      - couchdb0
+    healthcheck:
+      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  peer1.org1.ibn.vn:
+    container_name: peer1.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer1.org1.ibn.vn
+      - CORE_PEER_ADDRESS=peer1.org1.ibn.vn:8051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
+      - CORE_PEER_CHAINCODEADDRESS=peer1.org1.ibn.vn:8052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:8052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.ibn.vn:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org1.ibn.vn:8051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_OPERATIONS_LISTENADDRESS=0.0.0.0:9444
+      - CORE_METRICS_PROVIDER=prometheus
+      - CORE_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+    command: peer node start
+    volumes:
+      - /var/run/:/host/var/run/
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer1.org1.ibn.vn/msp:/etc/hyperledger/fabric/msp
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer1.org1.ibn.vn/tls/:/etc/hyperledger/fabric/tls
+      - peer1.org1.ibn.vn:/var/hyperledger/production
+      - ../config/core.yaml:/etc/hyperledger/fabric/core.yaml
+    ports:
+      - 8051:8051
+      - 8052:8052
+      - 9444:9444
+    networks:
+      - fabric-network
+    depends_on:
+      - couchdb1
+    healthcheck:
+      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  peer2.org1.ibn.vn:
+    container_name: peer2.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5
+    restart: unless-stopped
+    mem_limit: 2g
+    cpus: 2
+    environment:
+      - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+      - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
+      - FABRIC_LOGGING_SPEC=INFO
+      - CORE_PEER_TLS_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+      - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+      - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+      - CORE_PEER_ID=peer2.org1.ibn.vn
+      - CORE_PEER_ADDRESS=peer2.org1.ibn.vn:9051
+      - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
+      - CORE_PEER_CHAINCODEADDRESS=peer2.org1.ibn.vn:9052
+      - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:9052
+      - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.ibn.vn:7051
+      - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer2.org1.ibn.vn:9051
+      - CORE_PEER_LOCALMSPID=Org1MSP
+      - CORE_OPERATIONS_LISTENADDRESS=0.0.0.0:9445
+      - CORE_METRICS_PROVIDER=prometheus
+      - CORE_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb2:5984
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+      - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
+    command: peer node start
+    volumes:
+      - /var/run/:/host/var/run/
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer2.org1.ibn.vn/msp:/etc/hyperledger/fabric/msp
+      - ../organizations/peerOrganizations/org1.ibn.vn/peers/peer2.org1.ibn.vn/tls/:/etc/hyperledger/fabric/tls
+      - peer2.org1.ibn.vn:/var/hyperledger/production
+      - ../config/core.yaml:/etc/hyperledger/fabric/core.yaml
+    ports:
+      - 9051:9051
+      - 9052:9052
+      - 9445:9445
+    networks:
+      - fabric-network
+    depends_on:
+      - couchdb2
+    healthcheck:
+      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  couchdb0:
+    container_name: couchdb0
+    image: couchdb:3.3
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 5984:5984
+    volumes:
+      - couchdb0:/opt/couchdb/data
+    networks:
+      - fabric-network
+    healthcheck:
+      test: curl -f http://localhost:5984/_up || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  couchdb1:
+    container_name: couchdb1
+    image: couchdb:3.3
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 5985:5984
+    volumes:
+      - couchdb1:/opt/couchdb/data
+    networks:
+      - fabric-network
+    healthcheck:
+      test: curl -f http://localhost:5984/_up || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  couchdb2:
+    container_name: couchdb2
+    image: couchdb:3.3
+    restart: unless-stopped
+    mem_limit: 1g
+    cpus: 1
+    environment:
+      - COUCHDB_USER=admin
+      - COUCHDB_PASSWORD=adminpw
+    ports:
+      - 5986:5984
+    volumes:
+      - couchdb2:/opt/couchdb/data
+    networks:
+      - fabric-network
+    healthcheck:
+      test: curl -f http://localhost:5984/_up || exit 1
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+

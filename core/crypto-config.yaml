@@ -1,0 +1,16 @@
+OrdererOrgs:
+  - Name: Orderer
+    Domain: ibn.vn
+    Specs:
+      - Hostname: orderer
+      - Hostname: orderer1
+      - Hostname: orderer2
+
+PeerOrgs:
+  - Name: Org1
+    Domain: org1.ibn.vn
+    EnableNodeOUs: true
+    Template:
+      Count: 3
+    Users:
+      Count: 2
