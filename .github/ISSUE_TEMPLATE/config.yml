@@ -1,0 +1,9 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 💬 GitHub Discussions
+    url: https://github.com/Callmeduobgne/luongthiOlympic/discussions
+    about: Hãy hỏi và thảo luận về dự án tại đây
+  - name: 📚 Documentation
+    url: https://github.com/Callmeduobgne/luongthiOlympic/tree/main/docs
+    about: Xem tài liệu dự án
+
