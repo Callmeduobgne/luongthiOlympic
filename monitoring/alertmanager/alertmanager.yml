@@ -1,0 +1,206 @@
+# File: monitoring/alertmanager/alertmanager.yml
+# AlertManager Configuration for IBN Network - Production Grade
+
+global:
+  resolve_timeout: 5m
+  # Slack Webhook (uncomment và cấu hình nếu dùng Slack)
+  # slack_api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+  
+  # SMTP Configuration (uncomment nếu dùng Email)
+  # smtp_from: 'alertmanager@ibn.vn'
+  # smtp_smarthost: 'smtp.office365.com:587'
+  # smtp_auth_username: 'alertmanager@ibn.vn'
+  # smtp_auth_password: 'YOUR_PASSWORD'
+  # smtp_require_tls: true
+
+route:
+  group_by: ['alertname', 'cluster', 'service']
+  group_wait: 10s
+  group_interval: 10s
+  repeat_interval: 12h
+  receiver: 'default'
+  
+  routes:
+    # Critical alerts - immediate notification
+    - match:
+        severity: critical
+      receiver: 'critical-alerts'
+      continue: true
+      group_wait: 5s
+      repeat_interval: 1h
+    
+    # Warning alerts
+    - match:
+        severity: warning
+      receiver: 'warning-alerts'
+      group_wait: 30s
+      repeat_interval: 6h
+
+    # Blockchain-specific alerts
+    - match:
+        alertname: FabricPeerDown
+      receiver: 'blockchain-critical'
+      continue: true
+    
+    - match:
+        alertname: FabricOrdererDown
+      receiver: 'blockchain-critical'
+      continue: true
+    
+    - match:
+        alertname: MultipleFabricPeersDown
+      receiver: 'blockchain-critical'
+      continue: true
+    
+    - match:
+        alertname: MultipleFabricOrderersDown
+      receiver: 'blockchain-critical'
+      continue: true
+
+receivers:
+  - name: 'default'
+    # Slack notification (uncomment nếu đã cấu hình Slack)
+    # slack_configs:
+    #   - channel: '#monitoring'
+    #     username: 'AlertManager'
+    #     icon_emoji: ':bell:'
+    #     title: 'IBN Network Alert'
+    #     text: |
+    #       *Alert:* {{ .GroupLabels.alertname }}
+    #       *Severity:* {{ .GroupLabels.severity }}
+    #       *Summary:* {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+    #       *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+    #     send_resolved: true
+    
+    # Email fallback (commented - uncomment và cấu hình nếu cần)
+    # email_configs:
+    #   - to: 'ops@ibn.vn'
+    #     from: 'alertmanager@ibn.vn'
+    #     smarthost: 'smtp.gmail.com:587'
+    #     auth_username: 'alertmanager@ibn.vn'
+    #     auth_password: 'YOUR_APP_PASSWORD'
+    #     headers:
+    #       Subject: '[IBN Alert] {{ .GroupLabels.alertname }}'
+    #     html: |
+    #       <h2>IBN Network Alert</h2>
+    #       <table>
+    #         <tr><td><b>Alert:</b></td><td>{{ .GroupLabels.alertname }}</td></tr>
+    #         <tr><td><b>Severity:</b></td><td>{{ .GroupLabels.severity }}</td></tr>
+    #         <tr><td><b>Summary:</b></td><td>{{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</td></tr>
+    #         <tr><td><b>Description:</b></td><td>{{ range .Alerts }}{{ .Annotations.description }}{{ end }}</td></tr>
+    #         <tr><td><b>Time:</b></td><td>{{ range .Alerts }}{{ .StartsAt }}{{ end }}</td></tr>
+    #       </table>
+
+  - name: 'critical-alerts'
+    # Slack notification cho critical alerts
+    # slack_configs:
+    #   - channel: '#alerts-critical'
+    #     username: 'AlertManager [CRITICAL]'
+    #     icon_emoji: ':rotating_light:'
+    #     color: danger
+    #     title: '🚨 CRITICAL ALERT - IBN Network'
+    #     text: |
+    #       <!channel>
+    #       *Alert:* {{ .GroupLabels.alertname }}
+    #       *Cluster:* {{ .GroupLabels.cluster }}
+    #       *Severity:* {{ .GroupLabels.severity }}
+    #       *Summary:* {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+    #       *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+    #       *Time:* {{ range .Alerts }}{{ .StartsAt.Format "2006-01-02 15:04:05" }}{{ end }}
+    #     send_resolved: true
+    
+    # Email configs (commented - uncomment và cấu hình nếu cần)
+    # email_configs:
+    #   - to: 'ops@ibn.vn,cto@ibn.vn'
+    #     from: 'alertmanager@ibn.vn'
+    #     smarthost: 'smtp.gmail.com:587'
+    #     auth_username: 'alertmanager@ibn.vn'
+    #     auth_password: 'YOUR_APP_PASSWORD'
+    #     headers:
+    #       Subject: '🚨 [CRITICAL] {{ .GroupLabels.alertname }}'
+    #       Priority: 'urgent'
+    #     html: |
+    #       <h1 style="color:red">🚨 CRITICAL ALERT</h1>
+    #       <p><b>Alert:</b> {{ .GroupLabels.alertname }}</p>
+    #       <p><b>Summary:</b> {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}</p>
+    #       <p><b>Description:</b> {{ range .Alerts }}{{ .Annotations.description }}{{ end }}</p>
+    #       <p><b>Action Required:</b> Immediate response needed</p>
+    #       <p><b>Time:</b> {{ range .Alerts }}{{ .StartsAt }}{{ end }}</p>
+
+  - name: 'warning-alerts'
+    # Slack notification cho warnings
+    # slack_configs:
+    #   - channel: '#alerts-warning'
+    #     username: 'AlertManager [WARNING]'
+    #     icon_emoji: ':warning:'
+    #     color: warning
+    #     title: '⚠️ WARNING - IBN Network'
+    #     text: |
+    #       *Alert:* {{ .GroupLabels.alertname }}
+    #       *Severity:* {{ .GroupLabels.severity }}
+    #       *Summary:* {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+    #     send_resolved: true
+    
+    # Email configs (commented - uncomment và cấu hình nếu cần)
+    # email_configs:
+    #   - to: 'ops@ibn.vn'
+    #     from: 'alertmanager@ibn.vn'
+    #     smarthost: 'smtp.gmail.com:587'
+    #     auth_username: 'alertmanager@ibn.vn'
+    #     auth_password: 'YOUR_APP_PASSWORD'
+    #     headers:
+    #       Subject: '⚠️ [WARNING] {{ .GroupLabels.alertname }}'
+
+  - name: 'blockchain-critical'
+    # Slack notification cho blockchain alerts
+    # slack_configs:
+    #   - channel: '#blockchain-alerts'
+    #     username: 'AlertManager [BLOCKCHAIN]'
+    #     icon_emoji: ':link:'
+    #     color: danger
+    #     title: '🔗 BLOCKCHAIN CRITICAL ALERT'
+    #     text: |
+    #       <!channel>
+    #       *Alert:* {{ .GroupLabels.alertname }}
+    #       *Instance:* {{ .CommonLabels.instance }}
+    #       *Summary:* {{ range .Alerts }}{{ .Annotations.summary }}{{ end }}
+    #       *Description:* {{ range .Alerts }}{{ .Annotations.description }}{{ end }}
+    #     send_resolved: true
+    
+    # Email configs (commented - uncomment và cấu hình nếu cần)
+    # email_configs:
+    #   - to: 'ops@ibn.vn,blockchain-team@ibn.vn'
+    #     from: 'alertmanager@ibn.vn'
+    #     smarthost: 'smtp.gmail.com:587'
+    #     auth_username: 'alertmanager@ibn.vn'
+    #     auth_password: 'YOUR_APP_PASSWORD'
+    #     headers:
+    #       Subject: '🔗 BLOCKCHAIN CRITICAL: {{ .GroupLabels.alertname }}'
+    #     html: |
+    #       <h2 style="color: red;">🔗 BLOCKCHAIN CRITICAL ALERT</h2>
+    #       <h3>{{ .GroupLabels.alertname }}</h3>
+    #       <p><strong>Instance:</strong> {{ .CommonLabels.instance }}</p>
+    #       {{ range .Alerts }}
+    #       <p><strong>{{ .Annotations.summary }}</strong></p>
+    #       <p>{{ .Annotations.description }}</p>
+    #       <p><strong>Action:</strong> {{ .Annotations.action }}</p>
+    #       {{ end }}
+
+inhibit_rules:
+  # Inhibit warning if critical alert exists for same instance
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    equal: ['alertname', 'instance']
+  
+  # Inhibit individual peer/orderer alerts if multiple are down
+  - source_match:
+      alertname: 'MultipleFabricPeersDown'
+    target_match:
+      alertname: 'FabricPeerDown'
+  
+  - source_match:
+      alertname: 'MultipleFabricOrderersDown'
+    target_match:
+      alertname: 'FabricOrdererDown'

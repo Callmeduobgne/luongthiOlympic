@@ -1,0 +1,1256 @@
+# File: docker-compose.yml
+# IBN Network - Production Environment
+# Gộp tất cả services cho production
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose down
+#
+# Features:
+#   - Frontend production build (port 3001)
+#   - Backend production mode (port 9090)
+#   - Production logging and security
+#   - All services optimized for production
+#   - Network: ibn-network (bridge driver)
+#
+version: '3.8'
+networks:
+  ibn-network:
+    name: ibn-network
+    driver: bridge
+  admin-network:
+    name: admin-network
+    driver: bridge
+    internal: false  # Allow access from ibn-network via backend
+  logging:
+    name: logging
+    driver: bridge
+    external: false
+volumes:
+  orderer.ibn.vn: {}
+  orderer1.ibn.vn: {}
+  orderer2.ibn.vn: {}
+  peer0.org1.ibn.vn: {}
+  peer1.org1.ibn.vn: {}
+  peer2.org1.ibn.vn: {}
+  couchdb0: {}
+  couchdb1: {}
+  couchdb2: {}
+  postgres_data: {}
+  redis_data: {}
+  opa_data: {}
+  gateway_nginx_logs: {}
+  prometheus_data: {}
+  grafana_data: {}
+  alertmanager_data: {}
+services:
+  orderer.ibn.vn:
+    container_name: orderer.ibn.vn
+    image: hyperledger/fabric-orderer:2.5.9
+    environment:
+    - FABRIC_LOGGING_SPEC=INFO
+    - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+    - ORDERER_GENERAL_LISTENPORT=7050
+    - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+    - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+    - ORDERER_GENERAL_TLS_ENABLED=true
+    - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+    - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+    - ORDERER_ADMIN_TLS_ENABLED=true
+    - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9443
+    - ORDERER_OPERATIONS_LISTENADDRESS=orderer.ibn.vn:8443
+    - ORDERER_METRICS_PROVIDER=prometheus
+    working_dir: /root
+    command: orderer
+    volumes:
+    - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/msp:/var/hyperledger/orderer/msp
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls:/var/hyperledger/orderer/tls
+    - orderer.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+    - 7050:7050
+    - 8443:8443
+    - 9443:9443
+    networks:
+    - ibn-network
+    - logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /var/hyperledger/orderer/orderer.genesis.block"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  orderer1.ibn.vn:
+    container_name: orderer1.ibn.vn
+    image: hyperledger/fabric-orderer:2.5.9
+    environment:
+    - FABRIC_LOGGING_SPEC=INFO
+    - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+    - ORDERER_GENERAL_LISTENPORT=8050
+    - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+    - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+    - ORDERER_GENERAL_TLS_ENABLED=true
+    - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+    - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+    - ORDERER_ADMIN_TLS_ENABLED=true
+    - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:10443
+    - ORDERER_OPERATIONS_LISTENADDRESS=orderer1.ibn.vn:9443
+    - ORDERER_METRICS_PROVIDER=prometheus
+    working_dir: /root
+    command: orderer
+    volumes:
+    - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/msp:/var/hyperledger/orderer/msp
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/tls:/var/hyperledger/orderer/tls
+    - orderer1.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+    - 8050:8050
+    - 9444:9443
+    - 10443:10443
+    networks:
+    - ibn-network
+    - logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /var/hyperledger/orderer/orderer.genesis.block"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  orderer2.ibn.vn:
+    container_name: orderer2.ibn.vn
+    image: hyperledger/fabric-orderer:2.5.9
+    environment:
+    - FABRIC_LOGGING_SPEC=INFO
+    - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
+    - ORDERER_GENERAL_LISTENPORT=9050
+    - ORDERER_GENERAL_LOCALMSPID=OrdererMSP
+    - ORDERER_GENERAL_LOCALMSPDIR=/var/hyperledger/orderer/msp
+    - ORDERER_GENERAL_TLS_ENABLED=true
+    - ORDERER_GENERAL_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+    - ORDERER_CHANNELPARTICIPATION_ENABLED=true
+    - ORDERER_ADMIN_TLS_ENABLED=true
+    - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
+    - ORDERER_ADMIN_TLS_PRIVATEKEY=/var/hyperledger/orderer/tls/server.key
+    - ORDERER_ADMIN_TLS_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_TLS_CLIENTROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+    - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:11443
+    - ORDERER_OPERATIONS_LISTENADDRESS=orderer2.ibn.vn:10443
+    - ORDERER_METRICS_PROVIDER=prometheus
+    working_dir: /root
+    command: orderer
+    volumes:
+    - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/msp:/var/hyperledger/orderer/msp
+    - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/tls:/var/hyperledger/orderer/tls
+    - orderer2.ibn.vn:/var/hyperledger/production/orderer
+    ports:
+    - 9050:9050
+    - 9445:11443
+    - 10444:10443
+    networks:
+    - ibn-network
+    - logging
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test -f /var/hyperledger/orderer/orderer.genesis.block"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+  couchdb0:
+    container_name: couchdb0
+    image: couchdb:3.3.3
+    environment:
+    - COUCHDB_USER=admin
+    - COUCHDB_PASSWORD=adminpw
+    ports:
+    - 5984:5984
+    volumes:
+    - couchdb0:/opt/couchdb/data
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://admin:adminpw@localhost:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+  couchdb1:
+    container_name: couchdb1
+    image: couchdb:3.3.3
+    environment:
+    - COUCHDB_USER=admin
+    - COUCHDB_PASSWORD=adminpw
+    ports:
+    - 5985:5984
+    volumes:
+    - couchdb1:/opt/couchdb/data
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://admin:adminpw@localhost:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+  couchdb2:
+    container_name: couchdb2
+    image: couchdb:3.3.3
+    environment:
+    - COUCHDB_USER=admin
+    - COUCHDB_PASSWORD=adminpw
+    ports:
+    - 5986:5984
+    volumes:
+    - couchdb2:/opt/couchdb/data
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://admin:adminpw@localhost:5984/_up"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+  peer0.org1.ibn.vn:
+    container_name: peer0.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5.9
+    environment:
+    - FABRIC_CFG_PATH=/etc/hyperledger/peercfg
+    - FABRIC_LOGGING_SPEC=INFO
+    - CORE_PEER_TLS_ENABLED=true
+    - CORE_PEER_PROFILE_ENABLED=false
+    - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+    - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+    - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+    - CORE_PEER_ID=peer0.org1.ibn.vn
+    - CORE_PEER_ADDRESS=peer0.org1.ibn.vn:7051
+    - CORE_PEER_LISTENADDRESS=0.0.0.0:7051
+    - CORE_PEER_CHAINCODEADDRESS=peer0.org1.ibn.vn:7052
+    - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:7052
+    - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org1.ibn.vn:8051
+    - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer0.org1.ibn.vn:7051
+    - CORE_PEER_LOCALMSPID=Org1MSP
+    - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+    - CORE_OPERATIONS_LISTENADDRESS=peer0.org1.ibn.vn:9443
+    - CORE_METRICS_PROVIDER=prometheus
+    - CORE_CHAINCODE_EXECUTETIMEOUT=300s
+    - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+    - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+    - /var/run/docker.sock:/host/var/run/docker.sock
+    - ./core/organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn:/etc/hyperledger/fabric
+    - peer0.org1.ibn.vn:/var/hyperledger/production
+    - ./core/config:/etc/hyperledger/peercfg
+    ports:
+    - 7051:7051
+    - 7052:7052
+    - 9446:9443
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      couchdb0:
+        condition: service_healthy
+      orderer.ibn.vn:
+        condition: service_healthy
+      orderer1.ibn.vn:
+        condition: service_healthy
+      orderer2.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      # Check if peer process is running (port check may fail due to TLS, so we rely on process check)
+      test: ["CMD-SHELL", "pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+  peer1.org1.ibn.vn:
+    container_name: peer1.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5.9
+    environment:
+    - FABRIC_CFG_PATH=/etc/hyperledger/peercfg
+    - FABRIC_LOGGING_SPEC=INFO
+    - CORE_PEER_TLS_ENABLED=true
+    - CORE_PEER_PROFILE_ENABLED=false
+    - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+    - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+    - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+    - CORE_PEER_ID=peer1.org1.ibn.vn
+    - CORE_PEER_ADDRESS=peer1.org1.ibn.vn:8051
+    - CORE_PEER_LISTENADDRESS=0.0.0.0:8051
+    - CORE_PEER_CHAINCODEADDRESS=peer1.org1.ibn.vn:8052
+    - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:8052
+    - CORE_PEER_GOSSIP_BOOTSTRAP=peer0.org1.ibn.vn:7051
+    - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer1.org1.ibn.vn:8051
+    - CORE_PEER_LOCALMSPID=Org1MSP
+    - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+    - CORE_OPERATIONS_LISTENADDRESS=peer1.org1.ibn.vn:10443
+    - CORE_METRICS_PROVIDER=prometheus
+    - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+    - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+    - /var/run/docker.sock:/host/var/run/docker.sock
+    - ./core/organizations/peerOrganizations/org1.ibn.vn/peers/peer1.org1.ibn.vn:/etc/hyperledger/fabric
+    - peer1.org1.ibn.vn:/var/hyperledger/production
+    - ./core/config:/etc/hyperledger/peercfg
+    ports:
+    - 8051:8051
+    - 8052:8052
+    - 10446:10443
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      couchdb1:
+        condition: service_healthy
+      orderer.ibn.vn:
+        condition: service_healthy
+      orderer1.ibn.vn:
+        condition: service_healthy
+      orderer2.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      # Check if peer process is running (peer1 listens on port 8051)
+      test: ["CMD-SHELL", "pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+  peer2.org1.ibn.vn:
+    container_name: peer2.org1.ibn.vn
+    image: hyperledger/fabric-peer:2.5.9
+    environment:
+    - FABRIC_CFG_PATH=/etc/hyperledger/peercfg
+    - FABRIC_LOGGING_SPEC=INFO
+    - CORE_PEER_TLS_ENABLED=true
+    - CORE_PEER_PROFILE_ENABLED=false
+    - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
+    - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
+    - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
+    - CORE_PEER_ID=peer2.org1.ibn.vn
+    - CORE_PEER_ADDRESS=peer2.org1.ibn.vn:9051
+    - CORE_PEER_LISTENADDRESS=0.0.0.0:9051
+    - CORE_PEER_CHAINCODEADDRESS=peer2.org1.ibn.vn:9052
+    - CORE_PEER_CHAINCODELISTENADDRESS=0.0.0.0:9052
+    - CORE_PEER_GOSSIP_BOOTSTRAP=peer1.org1.ibn.vn:8051
+    - CORE_PEER_GOSSIP_EXTERNALENDPOINT=peer2.org1.ibn.vn:9051
+    - CORE_PEER_LOCALMSPID=Org1MSP
+    - CORE_PEER_MSPCONFIGPATH=/etc/hyperledger/fabric/msp
+    - CORE_OPERATIONS_LISTENADDRESS=peer2.org1.ibn.vn:11443
+    - CORE_METRICS_PROVIDER=prometheus
+    - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
+    - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb2:5984
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
+    - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+    working_dir: /root
+    command: peer node start
+    volumes:
+    - /var/run/docker.sock:/host/var/run/docker.sock
+    - ./core/organizations/peerOrganizations/org1.ibn.vn/peers/peer2.org1.ibn.vn:/etc/hyperledger/fabric
+    - peer2.org1.ibn.vn:/var/hyperledger/production
+    - ./core/config:/etc/hyperledger/peercfg
+    ports:
+    - 9051:9051
+    - 9052:9052
+    - 11446:11443
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      couchdb2:
+        condition: service_healthy
+      orderer.ibn.vn:
+        condition: service_healthy
+      orderer1.ibn.vn:
+        condition: service_healthy
+      orderer2.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      # Check if peer process is running (peer2 listens on port 9051)
+      test: ["CMD-SHELL", "pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+  postgres:
+    container_name: ibn-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ibn_gateway
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_INITDB_ARGS: --encoding=UTF-8
+      # Allow init script to use password from env var
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+    - 5432:5432
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U gateway -d ibn_gateway
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+  redis:
+    container_name: ibn-redis
+    image: redis:7-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme} --maxmemory 512mb --maxmemory-policy allkeys-lru
+    volumes:
+    - redis_data:/data
+    ports:
+    - 6379:6379
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -a
+      - ${REDIS_PASSWORD:-changeme}
+      - ping
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+  opa:
+    container_name: opa
+    image: openpolicyagent/opa:latest
+    environment:
+    - OPA_LOG_LEVEL=info
+    - OPA_LOG_FORMAT=json
+    ports:
+    - 8181:8181
+    volumes:
+    - ./backend/policies:/policies:ro
+    - opa_data:/data
+    networks:
+    - ibn-network
+    - logging
+    command:
+    - run
+    - --server
+    - --addr=:8181
+    - --log-level=info
+    - --log-format=json
+    - /policies
+    healthcheck:
+      test:
+      - CMD
+      - /opa
+      - eval
+      - 'true'
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+  ibn-backend:
+    container_name: ibn-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: gateway
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      DB_NAME: ibn_gateway
+      DB_SSLMODE: disable
+      DB_MIN_CONNS: 5
+      DB_MAX_CONNS: 25
+      DB_IDLE_TIMEOUT: 5m
+      DB_MAX_LIFETIME: 1h
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      REDIS_DB: 0
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_CRYPTO_PATH: /fabric/organizations
+      FABRIC_CERT_PATH: /fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      FABRIC_KEY_PATH: ''
+      FABRIC_TLS_CERT_PATH: ''
+      FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
+      FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
+      FABRIC_CHANNEL_NAME: ibnchannel
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_ISSUER: ibn-network
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 168h
+      OPA_ENABLED: 'true'
+      OPA_BASE_URL: http://opa:8181
+      RATE_LIMIT_ENABLED: 'true'
+      RATE_LIMIT_REQUESTS: 1000
+      RATE_LIMIT_BURST: 50
+      CB_MAX_REQUESTS: 3
+      CB_INTERVAL: 10s
+      CB_TIMEOUT: 60s
+      CB_FAILURE_RATIO: 0.6
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      OTEL_ENABLED: 'false'
+      # NOTE: GATEWAY_ENABLED MUST be true - Backend cannot connect directly to Fabric
+      GATEWAY_ENABLED: 'true'
+      GATEWAY_BASE_URL: http://api-gateway-nginx:80
+      GATEWAY_API_KEY: ''
+      GATEWAY_TIMEOUT: 30s
+      # Admin Service configuration (for chaincode lifecycle operations)
+      ADMIN_SERVICE_ENABLED: 'true'
+      ADMIN_SERVICE_BASE_URL: http://admin-service:8090
+      ADMIN_SERVICE_API_KEY: ${ADMIN_API_KEY:-admin-service-secret-key-change-in-production-min-32-chars}
+      ADMIN_SERVICE_TIMEOUT: 60s
+      # Loki configuration (for network logs)
+      LOKI_URL: http://loki:3100
+    volumes:
+    - ./core/organizations:/fabric/organizations:ro
+    ports:
+    - 9090:8080
+    networks:
+    - ibn-network
+    - logging  # For database, redis, API Gateway access
+    - admin-network  # For Admin Service access (isolated)
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:8080/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+  frontend:
+    container_name: ibn-frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+    - 3001:80
+    networks:
+    - ibn-network
+    - logging
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+  # Frontend dev mode with hot reload
+  frontend-dev:
+    container_name: ibn-frontend-dev
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    ports:
+    - 5173:5173
+    volumes:
+    - ./frontend:/app
+    - /app/node_modules
+    environment:
+    - NODE_ENV=development
+    networks:
+    - ibn-network
+    - logging
+    restart: unless-stopped
+    profiles:
+    - dev
+  ca.org1.ibn.vn:
+    container_name: ca.org1.ibn.vn
+    image: hyperledger/fabric-ca:1.5
+    restart: unless-stopped
+    environment:
+      FABRIC_CA_HOME: /etc/hyperledger/fabric-ca-server
+      FABRIC_CA_SERVER_CA_NAME: ca-org1
+      FABRIC_CA_SERVER_PORT: 7054
+      FABRIC_CA_SERVER_TLS_ENABLED: 'true'
+      FABRIC_CA_SERVER_DEBUG: 'false'
+    command:
+    - sh
+    - -c
+    - |
+      fabric-ca-server start \
+        -b admin:adminpw \
+        --cfg.identities.allowremove \
+        --cfg.affiliations.allowremove \
+        --ca.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-cert.pem \
+        --ca.keyfile /etc/hyperledger/fabric-ca-server-config/priv_sk \
+        --tls.enabled \
+        --tls.certfile /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-tls.crt \
+        --tls.keyfile /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-tls.key \
+        -d
+    ports:
+    - 7054:7054
+    volumes:
+    - ./core/fabric-ca/org1:/etc/hyperledger/fabric-ca-server
+    - ./core/organizations/peerOrganizations/org1.ibn.vn/ca:/etc/hyperledger/fabric-ca-server-config:ro
+    networks:
+    - ibn-network
+    healthcheck:
+      test:
+      - CMD
+      - sh
+      - -c
+      - fabric-ca-client getcainfo -u https://ca.org1.ibn.vn:7054 --tls.certfiles /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-tls.crt >/dev/null 2>&1
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+  api-gateway-1:
+    container_name: api-gateway-1
+    build:
+      context: ./api-gateway
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 8080
+      GATEWAY_ENV: production
+      POSTGRES_HOST: ibn-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ibn_gateway
+      POSTGRES_MAX_OPEN_CONNS: 25
+      POSTGRES_MAX_IDLE_CONNS: 10
+      POSTGRES_CONN_MAX_LIFETIME: 5m
+      POSTGRES_CONN_MAX_IDLE_TIME: 5m
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      REDIS_DB: 0
+      FABRIC_CHANNEL: ibnchannel
+      FABRIC_CHAINCODE: teaTraceCC
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
+      FABRIC_PEER_HOST_OVERRIDE: peer0.org1.ibn.vn
+      FABRIC_USER_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      FABRIC_USER_KEY_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      FABRIC_PEER_TLS_CA_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn/tls/ca.crt
+      FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
+      FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
+      FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
+      FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
+      FABRIC_CA_ADMIN_USER: admin
+      FABRIC_CA_ADMIN_PASS: adminpw
+      FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
+      FABRIC_CA_ADMIN_USER: admin
+      FABRIC_CA_ADMIN_PASS: adminpw
+      FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
+      FABRIC_CA_ADMIN_USER: admin
+      FABRIC_CA_ADMIN_PASS: adminpw
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_EXPIRY: 24h
+      JWT_ISSUER: ibn-api-gateway
+      RATE_LIMIT_ENABLED: 'true'
+      RATE_LIMIT_REQUESTS: 1000
+      RATE_LIMIT_WINDOW: 1h
+      CIRCUIT_BREAKER_MAX_REQUESTS: 3
+      CIRCUIT_BREAKER_INTERVAL: 10s
+      CIRCUIT_BREAKER_TIMEOUT: 60s
+      CIRCUIT_BREAKER_FAILURE_RATIO: 0.6
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: stdout
+      CORS_ALLOWED_ORIGINS: '*'
+      CORS_ALLOWED_METHODS: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      CORS_ALLOWED_HEADERS: Accept,Authorization,Content-Type,X-CSRF-Token,X-API-Key
+      CORS_EXPOSED_HEADERS: Link
+      CORS_MAX_AGE: 300
+      CORS_ALLOW_CREDENTIALS: 'true'
+      LOKI_URL: http://loki:3100
+    ports:
+    - 8084:8080
+    volumes:
+    - ./core/organizations:/app/organizations:ro
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      peer0.org1.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:8080/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  api-gateway-2:
+    container_name: api-gateway-2
+    build:
+      context: ./api-gateway
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 8080
+      GATEWAY_ENV: production
+      POSTGRES_HOST: ibn-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ibn_gateway
+      POSTGRES_MAX_OPEN_CONNS: 25
+      POSTGRES_MAX_IDLE_CONNS: 10
+      POSTGRES_CONN_MAX_LIFETIME: 5m
+      POSTGRES_CONN_MAX_IDLE_TIME: 5m
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      REDIS_DB: 0
+      FABRIC_CHANNEL: ibnchannel
+      FABRIC_CHAINCODE: teaTraceCC
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_PEER_ENDPOINT: peer1.org1.ibn.vn:8051
+      FABRIC_PEER_HOST_OVERRIDE: peer1.org1.ibn.vn
+      FABRIC_USER_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      FABRIC_USER_KEY_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      FABRIC_PEER_TLS_CA_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/peers/peer1.org1.ibn.vn/tls/ca.crt
+      FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
+      FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
+      FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_EXPIRY: 24h
+      JWT_ISSUER: ibn-api-gateway
+      RATE_LIMIT_ENABLED: 'true'
+      RATE_LIMIT_REQUESTS: 1000
+      RATE_LIMIT_WINDOW: 1h
+      CIRCUIT_BREAKER_MAX_REQUESTS: 3
+      CIRCUIT_BREAKER_INTERVAL: 10s
+      CIRCUIT_BREAKER_TIMEOUT: 60s
+      CIRCUIT_BREAKER_FAILURE_RATIO: 0.6
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: stdout
+      CORS_ALLOWED_ORIGINS: '*'
+      CORS_ALLOWED_METHODS: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      CORS_ALLOWED_HEADERS: Accept,Authorization,Content-Type,X-CSRF-Token,X-API-Key
+      CORS_EXPOSED_HEADERS: Link
+      CORS_MAX_AGE: 300
+      CORS_ALLOW_CREDENTIALS: 'true'
+      LOKI_URL: http://loki:3100
+    ports:
+    - 8082:8080
+    volumes:
+    - ./core/organizations:/app/organizations:ro
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      peer1.org1.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:8080/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  api-gateway-3:
+    container_name: api-gateway-3
+    build:
+      context: ./api-gateway
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      GATEWAY_HOST: 0.0.0.0
+      GATEWAY_PORT: 8080
+      GATEWAY_ENV: production
+      POSTGRES_HOST: ibn-postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: gateway
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ibn_gateway
+      POSTGRES_MAX_OPEN_CONNS: 25
+      POSTGRES_MAX_IDLE_CONNS: 10
+      POSTGRES_CONN_MAX_LIFETIME: 5m
+      POSTGRES_CONN_MAX_IDLE_TIME: 5m
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-changeme}
+      REDIS_DB: 0
+      FABRIC_CHANNEL: ibnchannel
+      FABRIC_CHAINCODE: teaTraceCC
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_PEER_ENDPOINT: peer2.org1.ibn.vn:9051
+      FABRIC_PEER_HOST_OVERRIDE: peer2.org1.ibn.vn
+      FABRIC_USER_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      FABRIC_USER_KEY_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      FABRIC_PEER_TLS_CA_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/peers/peer2.org1.ibn.vn/tls/ca.crt
+      FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
+      FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
+      FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_EXPIRY: 24h
+      JWT_ISSUER: ibn-api-gateway
+      RATE_LIMIT_ENABLED: 'true'
+      RATE_LIMIT_REQUESTS: 1000
+      RATE_LIMIT_WINDOW: 1h
+      CIRCUIT_BREAKER_MAX_REQUESTS: 3
+      CIRCUIT_BREAKER_INTERVAL: 10s
+      CIRCUIT_BREAKER_TIMEOUT: 60s
+      CIRCUIT_BREAKER_FAILURE_RATIO: 0.6
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      LOG_OUTPUT: stdout
+      CORS_ALLOWED_ORIGINS: '*'
+      CORS_ALLOWED_METHODS: GET,POST,PUT,PATCH,DELETE,OPTIONS
+      CORS_ALLOWED_HEADERS: Accept,Authorization,Content-Type,X-CSRF-Token,X-API-Key
+      CORS_EXPOSED_HEADERS: Link
+      CORS_MAX_AGE: 300
+      CORS_ALLOW_CREDENTIALS: 'true'
+      LOKI_URL: http://loki:3100
+    ports:
+    - 8083:8080
+    volumes:
+    - ./core/organizations:/app/organizations:ro
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      peer2.org1.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:8080/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  api-gateway-nginx:
+    container_name: api-gateway-nginx
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+    - ./api-gateway/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    - gateway_nginx_logs:/var/log/nginx
+    ports:
+    - 8085:80
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+      api-gateway-1:
+        condition: service_healthy
+      api-gateway-2:
+        condition: service_healthy
+      api-gateway-3:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://127.0.0.1/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+  admin-service:
+    container_name: admin-service
+    build:
+      context: ./admin-service
+      dockerfile: docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      ADMIN_SERVER_HOST: 0.0.0.0
+      ADMIN_SERVER_PORT: 8090
+      ADMIN_SERVER_ENV: production
+      ADMIN_FABRIC_CHANNEL: ibnchannel
+      ADMIN_FABRIC_MSP_ID: Org1MSP
+      ADMIN_FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
+      ADMIN_FABRIC_PEER_HOST_OVERRIDE: peer0.org1.ibn.vn
+      ADMIN_FABRIC_USER_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      ADMIN_FABRIC_USER_KEY_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      ADMIN_FABRIC_PEER_TLS_CA_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn/tls/ca.crt
+      ADMIN_FABRIC_ORDERER_TLS_CA_PATH: /app/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls/ca.crt
+      FABRIC_CFG_PATH: /app/fabric-config
+      ADMIN_AUTH_API_KEY: ${ADMIN_API_KEY:-admin-service-secret-key-change-in-production-min-32-chars}
+      ADMIN_AUTH_ENABLED: 'true'
+      ADMIN_LOGGING_LEVEL: info
+      ADMIN_LOGGING_FORMAT: json
+      ADMIN_LOGGING_OUTPUT: stdout
+    # Note: Port 8090 exposed for health checks only
+    # Admin Service should only be accessed via admin-network (internal)
+    ports:
+    - 127.0.0.1:8090:8090  # Bind to localhost only for health checks
+    volumes:
+    - ./core/organizations:/app/organizations:ro
+    - ./core/config:/app/fabric-config:ro
+    networks:
+    - ibn-network
+    - logging  # For peer access
+    - admin-network  # Isolated network for admin operations
+    depends_on:
+      peer0.org1.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --no-verbose
+      - --tries=1
+      - --spider
+      - http://localhost:8090/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.45.0
+    restart: unless-stopped
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --storage.tsdb.retention.time=90d
+    - --storage.tsdb.retention.size=50GB
+    - --web.enable-lifecycle
+    - --web.enable-admin-api
+    ports:
+    - 9091:9090
+    volumes:
+    - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+    - ./monitoring/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
+    - prometheus_data:/prometheus
+    networks:
+    - ibn-network
+    - logging
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://localhost:9090/-/healthy
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:10.0.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clock-panel
+      GF_SERVER_ROOT_URL: https://monitoring.ibn.vn
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: info
+    ports:
+    - 3000:3000
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+    - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+    - prometheus
+    networks:
+    - ibn-network
+    - logging
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://localhost:3000/api/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  postgres-exporter:
+    container_name: postgres-exporter
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-changeme}@ibn-postgres:5432/${POSTGRES_DB:-ibn_gateway}?sslmode=disable
+      PG_EXPORTER_EXTEND_QUERY_PATH: /etc/postgres_exporter/queries.yaml
+    command:
+    - --extend.query-path=/etc/postgres_exporter/queries.yaml
+    volumes:
+    - ./monitoring/postgres-exporter/queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    ports:
+    - 9187:9187
+    networks:
+    - ibn-network
+    - logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://localhost:9187/metrics
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  node-exporter:
+    container_name: node-exporter
+    image: prom/node-exporter:v1.7.0
+    restart: unless-stopped
+    command:
+    - --path.procfs=/host/proc
+    - --path.sysfs=/host/sys
+    - --path.rootfs=/rootfs
+    - --collector.disable-defaults
+    - --collector.cpu
+    - --collector.meminfo
+    - --collector.loadavg
+    - --collector.diskstats
+    - --collector.filesystem
+    - --collector.netdev
+    - --collector.netstat
+    - --collector.netclass
+    - --collector.time
+    - --collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)
+    - --collector.netclass.ignored-devices=^(veth.*|docker.*|br-.*|lo)$$
+    volumes:
+    - /proc:/host/proc:ro
+    - /sys:/host/sys:ro
+    - /:/rootfs:ro
+    networks:
+    - ibn-network
+    - logging
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+  node-exporter-proxy:
+    container_name: node-exporter-proxy
+    image: nginx:1.26-alpine
+    restart: unless-stopped
+    depends_on:
+    - node-exporter
+    ports:
+    - 9100:9100
+    volumes:
+    - ./monitoring/node-exporter/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+    - ibn-network
+    - logging
+  cadvisor:
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    restart: unless-stopped
+    privileged: true
+    devices:
+    - /dev/kmsg
+    volumes:
+    - /:/rootfs:ro
+    - /var/run:/var/run:ro
+    - /sys:/sys:ro
+    - /var/lib/docker:/var/lib/docker:ro
+    - /dev/disk:/dev/disk:ro
+    ports:
+    - 8081:8080
+    networks:
+    - ibn-network
+    - logging
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://localhost:8080/healthz
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:v0.26.0
+    restart: unless-stopped
+    command:
+    - --config.file=/etc/alertmanager/alertmanager.yml
+    - --storage.path=/alertmanager
+    - --web.external-url=http://alertmanager.ibn.vn:9093
+    - --cluster.listen-address=
+    ports:
+    - 9093:9093
+    volumes:
+    - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    - alertmanager_data:/alertmanager
+    networks:
+    - ibn-network
+    - logging
+    depends_on:
+    - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test:
+      - CMD
+      - wget
+      - --spider
+      - -q
+      - http://localhost:9093/-/healthy
+      interval: 30s
+      timeout: 10s
+      retries: 3

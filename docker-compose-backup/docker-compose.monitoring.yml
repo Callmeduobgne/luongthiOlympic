@@ -1,0 +1,246 @@
+# File: docker-compose.monitoring.yml
+# Monitoring Stack (Prometheus, Grafana, AlertManager, Exporters)
+# 
+# ⚠️ DEPRECATED: File này đã được gộp vào docker-compose.dev.yml và docker-compose.prod.yml
+# 
+# KHUYẾN NGHỊ: Sử dụng file mới thay vì file này:
+#   - Development: docker-compose -f docker-compose.dev.yml up -d
+#   - Production:  docker-compose -f docker-compose.prod.yml up -d
+#
+# File này vẫn giữ lại để:
+#   - Chạy riêng monitoring khi cần debug
+#   - Reference cho cấu trúc
+#   - CI/CD riêng từng module
+#
+# Usage (legacy): docker-compose -f docker-compose.monitoring.yml up -d
+# Note: Requires docker-compose.network.yml to be running first
+#
+# Lưu ý khi down:
+# - File này dùng external network, nên down sẽ không ảnh hưởng đến network
+# - Để down hoàn toàn, nên down tất cả files cùng lúc
+
+version: '3.8'
+
+networks:
+  ibn-network:
+    external: true
+    name: ibn-network
+
+volumes:
+  # Monitoring volumes
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  nginx_logs:
+
+services:
+  # ============================================
+  # MONITORING STACK
+  # ============================================
+  
+  # Prometheus - Metrics Collection
+  prometheus:
+    container_name: prometheus
+    image: prom/prometheus:v2.45.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'  # 90 days retention
+      - '--storage.tsdb.retention.size=50GB'  # 50GB max
+      - '--web.enable-lifecycle'
+      - '--web.enable-admin-api'
+    ports:
+      - "9091:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - ./monitoring/prometheus/recording_rules.yml:/etc/prometheus/recording_rules.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - ibn-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana - Visualization
+  grafana:
+    container_name: grafana
+    image: grafana/grafana:10.0.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_INSTALL_PLUGINS: grafana-piechart-panel,grafana-clock-panel
+      GF_SERVER_ROOT_URL: https://monitoring.ibn.vn
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_LOG_MODE: console
+      GF_LOG_LEVEL: info
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    networks:
+      - ibn-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # PostgreSQL Exporter
+  # Note: depends_on postgres (from docker-compose.services.yml) chỉ hoạt động khi chạy với nhiều file cùng lúc
+  postgres-exporter:
+    container_name: postgres-exporter
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    restart: unless-stopped
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-gateway}:${POSTGRES_PASSWORD:-changeme}@ibn-postgres:5432/${POSTGRES_DB:-ibn_gateway}?sslmode=disable"
+      PG_EXPORTER_EXTEND_QUERY_PATH: "/etc/postgres_exporter/queries.yaml"
+    command:
+      - '--extend.query-path=/etc/postgres_exporter/queries.yaml'
+    volumes:
+      - ./monitoring/postgres-exporter/queries.yaml:/etc/postgres_exporter/queries.yaml:ro
+    ports:
+      - "9187:9187"
+    # depends_on sẽ hoạt động khi chạy với docker-compose.services.yml
+    # Nếu chạy riêng file này, cần đảm bảo postgres đã chạy
+    networks:
+      - ibn-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9187/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Node Exporter - System Metrics
+  node-exporter:
+    container_name: node-exporter
+    image: prom/node-exporter:v1.7.0
+    restart: unless-stopped
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+      - '--collector.disable-defaults'
+      - '--collector.cpu'
+      - '--collector.meminfo'
+      - '--collector.loadavg'
+      - '--collector.diskstats'
+      - '--collector.filesystem'
+      - '--collector.netdev'
+      - '--collector.netstat'
+      - '--collector.netclass'
+      - '--collector.time'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)'
+      - '--collector.netclass.ignored-devices=^(veth.*|docker.*|br-.*|lo)$$'
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    networks:
+      - ibn-network
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+
+  node-exporter-proxy:
+    container_name: node-exporter-proxy
+    image: nginx:1.26-alpine
+    restart: unless-stopped
+    depends_on:
+      - node-exporter
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./monitoring/node-exporter/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      - ibn-network
+
+  # cAdvisor - Container Metrics
+  cadvisor:
+    container_name: cadvisor
+    image: gcr.io/cadvisor/cadvisor:v0.47.0
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kmsg
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker:/var/lib/docker:ro
+      - /dev/disk:/dev/disk:ro
+    ports:
+      - "8081:8080"
+    networks:
+      - ibn-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8080/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # AlertManager - Alerting
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:v0.26.0
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--storage.path=/alertmanager'
+      - '--web.external-url=http://alertmanager.ibn.vn:9093'
+      - '--cluster.listen-address='  # Disable clustering for single instance
+    ports:
+      - "9093:9093"
+    volumes:
+      - ./monitoring/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks:
+      - ibn-network
+    depends_on:
+      - prometheus
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.25'
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

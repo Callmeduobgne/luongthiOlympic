@@ -1,0 +1,98 @@
+# File: docker-compose.yml
+# IBN Network - Main Orchestrator (LEGACY)
+# 
+# ⚠️ DEPRECATED: File này đã được thay thế bởi:
+#   - docker-compose.dev.yml (Development)
+#   - docker-compose.prod.yml (Production)
+# 
+# KHUYẾN NGHỊ: Sử dụng file mới:
+#   - Development: docker-compose -f docker-compose.dev.yml up -d
+#   - Production:  docker-compose -f docker-compose.prod.yml up -d
+#
+# File này chỉ định nghĩa networks và volumes, không có services.
+# Services được định nghĩa trong các file riêng (đã deprecated):
+# - docker-compose.network.yml: Hyperledger Fabric Network
+# - docker-compose.services.yml: Backend + Application Services
+# - docker-compose.gateway.yml: API Gateway với Load Balancing
+# - docker-compose.monitoring.yml: Monitoring Stack
+#
+# Usage (legacy - không khuyến nghị):
+#   docker-compose -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.gateway.yml -f docker-compose.monitoring.yml up -d
+#
+#   # Chạy từng phần:
+#   docker-compose -f docker-compose.network.yml up -d
+#   docker-compose -f docker-compose.services.yml up -d
+#   docker-compose -f docker-compose.gateway.yml up -d
+#   docker-compose -f docker-compose.monitoring.yml up -d
+#
+#   # Down tất cả (khuyến nghị):
+#   docker-compose -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.gateway.yml -f docker-compose.monitoring.yml down
+#
+#   # Down từng file (lưu ý: network sẽ không bị xóa nếu vẫn còn containers khác):
+#   docker-compose -f docker-compose.network.yml down --remove-orphans
+#
+#   # Chạy với development profile (frontend-dev):
+#   docker-compose -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.gateway.yml --profile dev up -d
+
+version: '3.8'
+
+# Include các file compose khác
+# Note: Docker Compose không hỗ trợ include trực tiếp trong version 3.8
+# Cần chạy với nhiều file: docker-compose -f docker-compose.yml -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.monitoring.yml up -d
+#
+# Hoặc sử dụng script helper (xem README.md)
+
+networks:
+  ibn-network:
+    name: ibn-network
+    driver: bridge
+
+volumes:
+  # Tất cả volumes được định nghĩa trong các file compose riêng
+  # Định nghĩa ở đây để đảm bảo volumes được tạo khi chạy file chính
+  # Hyperledger Fabric volumes
+  orderer.ibn.vn:
+  orderer1.ibn.vn:
+  orderer2.ibn.vn:
+  peer0.org1.ibn.vn:
+  peer1.org1.ibn.vn:
+  peer2.org1.ibn.vn:
+  couchdb0:
+  couchdb1:
+  couchdb2:
+  
+  # Backend volumes
+  postgres_data:
+  redis_data:
+  keycloak_data:
+  opa_data:
+  
+  # Monitoring volumes
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+  nginx_logs:
+
+  # Frontend development volume
+  frontend_node_modules:
+  
+  # Gateway volumes
+  gateway_nginx_logs:
+
+# Services được định nghĩa trong các file riêng:
+# - docker-compose.network.yml: Fabric network services
+# - docker-compose.services.yml: Backend + Application services
+# - docker-compose.gateway.yml: API Gateway với Load Balancing
+# - docker-compose.monitoring.yml: Monitoring services
+#
+# Để chạy tất cả, sử dụng:
+# docker-compose -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.gateway.yml -f docker-compose.monitoring.yml up -d
+
+# Services được định nghĩa trong các file compose riêng:
+# - docker-compose.network.yml: Fabric network services
+# - docker-compose.services.yml: Backend + Application services
+# - docker-compose.gateway.yml: API Gateway với Load Balancing (3 instances + Nginx)
+# - docker-compose.monitoring.yml: Monitoring services
+#
+# Để chạy tất cả, sử dụng:
+# docker-compose -f docker-compose.network.yml -f docker-compose.services.yml -f docker-compose.gateway.yml -f docker-compose.monitoring.yml up -d

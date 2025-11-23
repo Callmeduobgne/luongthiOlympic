@@ -4,7 +4,9 @@ networks:
   fabric-network:
     external: true
   logging:
+    name: logging
     driver: bridge
+    external: false
 
 volumes:
   loki_data:

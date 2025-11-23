@@ -1,0 +1,28 @@
+# Development Dockerfile với hot reload (Air)
+# Using Go 1.24 to match go.mod (1.24.6) and ensure compatibility
+FROM golang:1.24-alpine
+
+# Install build dependencies và Air
+# Pin air version to v1.51.0 (compatible with Go 1.24)
+# air@latest (v1.63.0) requires Go >= 1.25
+RUN apk add --no-cache git make curl && \
+    go install github.com/cosmtrek/air@v1.51.0
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code (sẽ được mount trong docker-compose)
+# COPY . .
+
+# Expose port
+EXPOSE 8080
+
+# Run Air for hot reload
+CMD ["air", "-c", ".air.toml"]
+

@@ -1,3 +1,17 @@
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package handlers
 
 import (
@@ -5,6 +19,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/ibn-network/api-gateway/internal/handlers/dashboard"
 	"github.com/ibn-network/api-gateway/internal/models"
 	"github.com/ibn-network/api-gateway/internal/services/cache"
 	"github.com/ibn-network/api-gateway/internal/services/fabric"
@@ -88,11 +103,29 @@ func (h *HealthHandler) Health(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Get WebSocket metrics
+	wsMetrics := dashboard.GetWebSocketMetrics()
+
 	response := models.HealthResponse{
 		Status:   status,
 		Version:  h.version,
 		Uptime:   int64(time.Since(h.startTime).Seconds()),
 		Services: services,
+	}
+
+	// Add WebSocket metrics to response (if available)
+	if wsMetrics != nil {
+		responseMap := map[string]interface{}{
+			"status":   response.Status,
+			"version":  response.Version,
+			"uptime":   response.Uptime,
+			"services": response.Services,
+			"websocket": wsMetrics,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		json.NewEncoder(w).Encode(responseMap)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")

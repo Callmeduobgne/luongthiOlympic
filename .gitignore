@@ -75,3 +75,29 @@ dist/
 *.pb
 *.pb.gz
 
+# Channel artifacts with permission issues
+core/channel-artifacts/ibnchannel-config-update.pb
+core/channel-artifacts/ibnchannel-envelope.json
+
+# Fabric CA - Sensitive certificates and keys
+core/fabric-ca/**/keystore/
+core/fabric-ca/**/adminMsp/
+core/fabric-ca/**/*.key
+core/fabric-ca/**/*.crt
+core/fabric-ca/**/*.csr
+core/organizations/**/ca/*.key
+core/organizations/**/ca/*.crt
+core/organizations/**/ca/*.csr
+core/organizations/**/msp/keystore/
+core/organizations/**/msp/signcerts/
+core/organizations/**/tls/**/*.key
+core/organizations/**/tls/**/*.crt
+core/organizations/**/users/**/msp/keystore/
+core/organizations/**/users/**/msp/signcerts/
+
+# Server binaries
+server
+main
+*/server
+*/main
+

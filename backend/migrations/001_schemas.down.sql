@@ -1,0 +1,7 @@
+-- Drop schemas (cascade will drop all tables)
+DROP SCHEMA IF EXISTS audit CASCADE;
+DROP SCHEMA IF EXISTS access CASCADE;
+DROP SCHEMA IF EXISTS events CASCADE;
+DROP SCHEMA IF NOT EXISTS blockchain CASCADE;
+DROP SCHEMA IF EXISTS auth CASCADE;
+

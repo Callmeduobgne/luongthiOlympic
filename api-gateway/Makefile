@@ -41,19 +41,19 @@ docker-logs: ## View logs
 
 migrate-up: ## Run database migrations
 	@echo "Running migrations..."
-	@migrate -path migrations -database "postgres://gateway:changeme@localhost:5432/ibn_gateway?sslmode=disable" up
+	@PATH=$$HOME/go/bin:$$PATH migrate -path migrations -database "postgres://gateway:changeme@localhost:5432/ibn_gateway?sslmode=disable" up
 
 migrate-down: ## Rollback database migrations
 	@echo "Rolling back migrations..."
-	@migrate -path migrations -database "postgres://gateway:changeme@localhost:5432/ibn_gateway?sslmode=disable" down 1
+	@PATH=$$HOME/go/bin:$$PATH migrate -path migrations -database "postgres://gateway:changeme@localhost:5432/ibn_gateway?sslmode=disable" down 1
 
 migrate-create: ## Create new migration (use: make migrate-create NAME=migration_name)
 	@echo "Creating migration..."
-	@migrate create -ext sql -dir migrations -seq $(NAME)
+	@PATH=$$HOME/go/bin:$$PATH migrate create -ext sql -dir migrations -seq $(NAME)
 
 sqlc: ## Generate Go code from SQL
 	@echo "Generating sqlc code..."
-	@sqlc generate
+	@PATH=$$HOME/go/bin:$$PATH sqlc generate
 
 lint: ## Run linter
 	@echo "Running linter..."

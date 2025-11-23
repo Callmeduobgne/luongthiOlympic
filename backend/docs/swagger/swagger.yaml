@@ -1,0 +1,175 @@
+basePath: /api/v1
+definitions:
+  github_com_ibn-network_backend_internal_services_auth.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  github_com_ibn-network_backend_internal_services_auth.LoginResponse:
+    properties:
+      access_token:
+        type: string
+      expires_at:
+        type: string
+      refresh_token:
+        type: string
+      user:
+        $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.User'
+    type: object
+  github_com_ibn-network_backend_internal_services_auth.RegisterRequest:
+    properties:
+      email:
+        type: string
+      full_name:
+        type: string
+      msp_id:
+        type: string
+      password:
+        minLength: 8
+        type: string
+      role:
+        enum:
+        - user
+        - admin
+        - operator
+        type: string
+    required:
+    - email
+    - password
+    - role
+    type: object
+  github_com_ibn-network_backend_internal_services_auth.User:
+    properties:
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      full_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      msp_id:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+    type: object
+host: localhost:9090
+info:
+  contact:
+    email: support@ibn.vn
+    name: IBN Network Team
+  description: Production-ready Backend API for Hyperledger Fabric IBN Network - Tea
+    Traceability
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  termsOfService: http://swagger.io/terms/
+  title: IBN Backend API
+  version: 1.0.0
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user and return JWT tokens
+      parameters:
+      - description: Login request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.LoginResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Login user
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Register a new user account
+      parameters:
+      - description: Registration request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.User'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Register a new user
+      tags:
+      - auth
+  /profile:
+    get:
+      description: Get authenticated user's profile information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_ibn-network_backend_internal_services_auth.User'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get user profile
+      tags:
+      - auth
+securityDefinitions:
+  ApiKeyAuth:
+    description: API Key for service-to-service authentication
+    in: header
+    name: X-API-Key
+    type: apiKey
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token (Legacy JWT or OAuth
+      2.0)
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -1,0 +1,220 @@
+# File: monitoring/prometheus/alerts.yml
+# Prometheus Alert Rules for IBN Network - Production Tuned
+
+groups:
+  # Infrastructure Alerts
+  - name: infrastructure
+    interval: 30s
+    rules:
+      # CPU
+      - alert: HighCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m  # Sustained for 10 minutes
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanize }}% (threshold: 80%)"
+          runbook_url: "https://runbooks.ibn.vn/high-cpu"
+
+      - alert: CriticalCPUUsage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "CRITICAL: CPU usage on {{ $labels.instance }}"
+          description: "CPU usage is {{ $value | humanize }}% (threshold: 95%)"
+          action: "Check processes with `docker exec <container> top`"
+
+      # Memory
+      - alert: HighMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 85
+        for: 10m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "High memory usage on {{ $labels.instance }}"
+          description: "Memory usage is {{ $value | humanize }}%"
+
+      - alert: CriticalMemoryUsage
+        expr: (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > 95
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "CRITICAL: Memory exhausted on {{ $labels.instance }}"
+          action: "Investigate memory leaks or add more RAM"
+
+      # Disk Space
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 20
+        for: 10m
+        labels:
+          severity: warning
+          team: infrastructure
+        annotations:
+          summary: "Low disk space on {{ $labels.instance }}"
+          description: "Disk space is {{ $value | humanize }}%"
+
+      - alert: DiskSpaceCritical
+        expr: (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 < 10
+        for: 5m
+        labels:
+          severity: critical
+          team: infrastructure
+        annotations:
+          summary: "CRITICAL: Disk space almost full on {{ $labels.instance }}"
+          action: "Clean up logs or increase disk space immediately"
+
+  # Service Health Alerts
+  - name: services
+    interval: 30s
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 3m  # Allow time for restarts
+        labels:
+          severity: critical
+          team: ops
+        annotations:
+          summary: "Service {{ $labels.job }} is down"
+          description: "{{ $labels.instance }} has been down for more than 3 minutes"
+          action: "Check with `docker logs {{ $labels.job }}`"
+
+      - alert: ServiceFlapping
+        expr: changes(up[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          team: ops
+        annotations:
+          summary: "Service {{ $labels.job }} is flapping"
+          description: "Service has restarted {{ $value }} times in last 10 minutes"
+
+  # Database Alerts
+  - name: database
+    interval: 30s
+    rules:
+      - alert: PostgreSQLDown
+        expr: up{job="postgres"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: database
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "Database is unavailable"
+          action: "Restart with `docker restart ibn-postgres`"
+
+      - alert: PostgreSQLTooManyConnections
+        expr: sum(pg_stat_activity_count) > 150
+        for: 5m
+        labels:
+          severity: warning
+          team: database
+        annotations:
+          summary: "PostgreSQL has too many connections"
+          description: "Active connections: {{ $value }} (limit: 200)"
+          action: "Check for connection leaks in application"
+
+      - alert: PostgreSQLHighQueryTime
+        expr: rate(pg_stat_database_blks_read[5m]) / rate(pg_stat_database_blks_hit[5m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: database
+        annotations:
+          summary: "PostgreSQL cache hit ratio is low"
+          description: "Consider increasing shared_buffers"
+
+  # Blockchain Alerts - PRODUCTION TUNED
+  - name: blockchain
+    interval: 30s
+    rules:
+      # Peer Alerts
+      - alert: FabricPeerDown
+        expr: up{job="fabric-peers"} == 0
+        for: 5m  # Allow time for graceful restart
+        labels:
+          severity: critical
+          team: blockchain
+        annotations:
+          summary: "Fabric peer {{ $labels.instance }} is down"
+          description: "Peer has been down for 5+ minutes"
+          action: "Check logs: `docker logs {{ $labels.peer }}`"
+          runbook_url: "https://runbooks.ibn.vn/peer-down"
+
+      - alert: MultipleFabricPeersDown
+        expr: count(up{job="fabric-peers"} == 0) >= 2
+        for: 3m
+        labels:
+          severity: critical
+          team: blockchain
+          page: "true"  # Trigger pager
+        annotations:
+          summary: "Multiple Fabric peers are down"
+          description: "{{ $value }} peers are unavailable - CONSENSUS AT RISK"
+          action: "IMMEDIATE ACTION REQUIRED - Check network and restart peers"
+
+      # Orderer Alerts
+      - alert: FabricOrdererDown
+        expr: up{job="fabric-orderers"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: blockchain
+        annotations:
+          summary: "Fabric orderer {{ $labels.instance }} is down"
+          description: "Orderer unavailable - transactions may be delayed"
+          action: "Check Raft cluster: `docker logs {{ $labels.orderer }}`"
+
+      - alert: MultipleFabricOrderersDown
+        expr: count(up{job="fabric-orderers"} == 0) >= 2
+        for: 3m
+        labels:
+          severity: critical
+          team: blockchain
+          page: "true"
+        annotations:
+          summary: "Multiple orderers down - RAFT CONSENSUS LOST"
+          description: "{{ $value }} orderers down - blockchain HALTED"
+          action: "EMERGENCY: Restore quorum immediately"
+
+      # Backend API
+      - alert: BackendAPIDown
+        expr: up{job="ibn-backend"} == 0
+        for: 3m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Backend API is down"
+          description: "API Gateway unavailable"
+          action: "Restart: `docker restart ibn-backend`"
+
+      - alert: BackendAPIHighLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 10m
+        labels:
+          severity: warning
+          team: backend
+        annotations:
+          summary: "Backend API high latency"
+          description: "95th percentile response time: {{ $value | humanize }}s"
+          action: "Check database queries and chaincode performance"
+
+      - alert: BackendAPIHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Backend API high error rate"
+          description: "{{ $value | humanizePercentage }} of requests are failing"
+

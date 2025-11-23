@@ -21,7 +21,13 @@ services:
     image: hyperledger/fabric-orderer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=orderer"
+      - "node=orderer.ibn.vn"
+      - "environment=production"
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -41,6 +47,7 @@ services:
       - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9443
       - ORDERER_METRICS_PROVIDER=prometheus
       - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - ORDERER_OPERATIONS_LISTENADDRESS=0.0.0.0:8443
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: orderer
     volumes:
@@ -52,21 +59,33 @@ services:
     ports:
       - 7050:7050
       - 9443:9443
+      - 8443:8443
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: pgrep -f orderer > /dev/null || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "pgrep -f orderer > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   orderer1.ibn.vn:
     container_name: orderer1.ibn.vn
     image: hyperledger/fabric-orderer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=orderer"
+      - "node=orderer1.ibn.vn"
+      - "environment=production"
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -86,6 +105,7 @@ services:
       - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9447
       - ORDERER_METRICS_PROVIDER=prometheus
       - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - ORDERER_OPERATIONS_LISTENADDRESS=0.0.0.0:8444
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: orderer
     volumes:
@@ -97,21 +117,33 @@ services:
     ports:
       - 8050:8050
       - 9447:9447
+      - 8444:8444
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: pgrep -f orderer > /dev/null || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "pgrep -f orderer > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   orderer2.ibn.vn:
     container_name: orderer2.ibn.vn
     image: hyperledger/fabric-orderer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=orderer"
+      - "node=orderer2.ibn.vn"
+      - "environment=production"
     environment:
       - FABRIC_LOGGING_SPEC=INFO
       - ORDERER_GENERAL_LISTENADDRESS=0.0.0.0
@@ -131,6 +163,7 @@ services:
       - ORDERER_ADMIN_LISTENADDRESS=0.0.0.0:9448
       - ORDERER_METRICS_PROVIDER=prometheus
       - ORDERER_METRICS_PROMETHEUS_HANDLERPATH=/metrics
+      - ORDERER_OPERATIONS_LISTENADDRESS=0.0.0.0:8445
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric
     command: orderer
     volumes:
@@ -142,27 +175,40 @@ services:
     ports:
       - 9050:9050
       - 9448:9448
+      - 8445:8445
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: pgrep -f orderer > /dev/null || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "pgrep -f orderer > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   peer0.org1.ibn.vn:
     container_name: peer0.org1.ibn.vn
     image: hyperledger/fabric-peer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=peer"
+      - "node=peer0.org1.ibn.vn"
+      - "organization=org1"
+      - "environment=production"
     environment:
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
       - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
@@ -181,6 +227,7 @@ services:
       - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
       - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
       - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: peer node start
     volumes:
@@ -196,26 +243,39 @@ services:
     networks:
       - fabric-network
     depends_on:
-      - couchdb0
+      couchdb0:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "test -f /etc/hyperledger/fabric/msp/config.yaml && pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   peer1.org1.ibn.vn:
     container_name: peer1.org1.ibn.vn
     image: hyperledger/fabric-peer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=peer"
+      - "node=peer1.org1.ibn.vn"
+      - "organization=org1"
+      - "environment=production"
     environment:
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
       - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
@@ -234,6 +294,7 @@ services:
       - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
       - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
       - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: peer node start
     volumes:
@@ -249,26 +310,39 @@ services:
     networks:
       - fabric-network
     depends_on:
-      - couchdb1
+      couchdb1:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "test -f /etc/hyperledger/fabric/msp/config.yaml && pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   peer2.org1.ibn.vn:
     container_name: peer2.org1.ibn.vn
     image: hyperledger/fabric-peer:2.5
     restart: unless-stopped
     mem_limit: 2g
+    mem_reservation: 1g
     cpus: 2
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=peer"
+      - "node=peer2.org1.ibn.vn"
+      - "organization=org1"
+      - "environment=production"
     environment:
       - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
       - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=fabric-network
       - FABRIC_LOGGING_SPEC=INFO
       - CORE_PEER_TLS_ENABLED=true
-      - CORE_PEER_PROFILE_ENABLED=true
+      - CORE_PEER_PROFILE_ENABLED=false
       - CORE_PEER_TLS_CERT_FILE=/etc/hyperledger/fabric/tls/server.crt
       - CORE_PEER_TLS_KEY_FILE=/etc/hyperledger/fabric/tls/server.key
       - CORE_PEER_TLS_ROOTCERT_FILE=/etc/hyperledger/fabric/tls/ca.crt
@@ -287,6 +361,7 @@ services:
       - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb2:5984
       - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
       - CORE_LEDGER_STATE_COUCHDBCONFIG_PASSWORD=adminpw
+      - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     working_dir: /opt/gopath/src/github.com/hyperledger/fabric/peer
     command: peer node start
     volumes:
@@ -302,20 +377,32 @@ services:
     networks:
       - fabric-network
     depends_on:
-      - couchdb2
+      couchdb2:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: test -f /etc/hyperledger/fabric/msp/config.yaml || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "test -f /etc/hyperledger/fabric/msp/config.yaml && pgrep -f 'peer node start' > /dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   couchdb0:
     container_name: couchdb0
     image: couchdb:3.3
     restart: unless-stopped
     mem_limit: 1g
+    mem_reservation: 512m
     cpus: 1
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=couchdb"
+      - "node=couchdb0"
+      - "environment=production"
     environment:
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=adminpw
@@ -325,19 +412,30 @@ services:
       - couchdb0:/opt/couchdb/data
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: curl -f http://localhost:5984/_up || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "curl -f http://localhost:5984/_up || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   couchdb1:
     container_name: couchdb1
     image: couchdb:3.3
     restart: unless-stopped
     mem_limit: 1g
+    mem_reservation: 512m
     cpus: 1
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=couchdb"
+      - "node=couchdb1"
+      - "environment=production"
     environment:
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=adminpw
@@ -347,19 +445,30 @@ services:
       - couchdb1:/opt/couchdb/data
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: curl -f http://localhost:5984/_up || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "curl -f http://localhost:5984/_up || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 
   couchdb2:
     container_name: couchdb2
     image: couchdb:3.3
     restart: unless-stopped
     mem_limit: 1g
+    mem_reservation: 512m
     cpus: 1
+    labels:
+      - "service=hyperledger-fabric"
+      - "component=couchdb"
+      - "node=couchdb2"
+      - "environment=production"
     environment:
       - COUCHDB_USER=admin
       - COUCHDB_PASSWORD=adminpw
@@ -369,10 +478,15 @@ services:
       - couchdb2:/opt/couchdb/data
     networks:
       - fabric-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     healthcheck:
-      test: curl -f http://localhost:5984/_up || exit 1
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      test: ["CMD-SHELL", "curl -f http://localhost:5984/_up || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
 

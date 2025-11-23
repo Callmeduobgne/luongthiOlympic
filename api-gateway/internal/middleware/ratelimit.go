@@ -1,8 +1,23 @@
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package middleware
 
 import (
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/ibn-network/api-gateway/internal/config"
 	"github.com/ibn-network/api-gateway/internal/models"
@@ -30,6 +45,11 @@ func NewRateLimitMiddleware(cache *cache.Service, cfg *config.RateLimitConfig, l
 
 // Limit applies rate limiting based on IP address or API key
 func (m *RateLimitMiddleware) Limit(next http.Handler) http.Handler {
+	return m.LimitWithConfig(next, m.config.Requests, m.config.Window)
+}
+
+// LimitWithConfig applies rate limiting with custom requests and window
+func (m *RateLimitMiddleware) LimitWithConfig(next http.Handler, requests int, window time.Duration) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !m.enabled {
 			next.ServeHTTP(w, r)
@@ -44,8 +64,8 @@ func (m *RateLimitMiddleware) Limit(next http.Handler) http.Handler {
 		allowed, err := m.cache.CheckRateLimit(
 			r.Context(),
 			key,
-			m.config.Requests,
-			m.config.Window,
+			requests,
+			window,
 		)
 
 		if err != nil {
@@ -63,7 +83,7 @@ func (m *RateLimitMiddleware) Limit(next http.Handler) http.Handler {
 
 			respondJSON(w, http.StatusTooManyRequests, models.NewErrorResponse(
 				models.ErrCodeRateLimitExceeded,
-				fmt.Sprintf("Rate limit exceeded. Max %d requests per %s", m.config.Requests, m.config.Window),
+				fmt.Sprintf("Rate limit exceeded. Max %d requests per %s", requests, window),
 				nil,
 			))
 			return
@@ -71,6 +91,12 @@ func (m *RateLimitMiddleware) Limit(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r)
 	})
+}
+
+// LimitLogin applies stricter rate limiting for login endpoints (anti-brute force)
+// Default: 5 attempts per 15 minutes per IP
+func (m *RateLimitMiddleware) LimitLogin(next http.Handler) http.Handler {
+	return m.LimitWithConfig(next, 5, 15*time.Minute)
 }
 
 // getIdentifier extracts identifier from request (API key or IP)

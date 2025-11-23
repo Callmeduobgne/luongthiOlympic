@@ -31,7 +31,11 @@ peer chaincode query -C mychannel -n teaTraceCC \
 ✅ **Xác minh lô trà** - Verifier xác minh hash để chống giả mạo  
 ✅ **Cập nhật trạng thái** - Admin quản lý lifecycle của lô trà  
 ✅ **Hash verification** - SHA-256 đảm bảo tính toàn vẹn  
-✅ **MSP portable** - Config linh hoạt, chạy trên mọi network
+✅ **MSP portable** - Config linh hoạt, chạy trên mọi network  
+✅ **Query functions** - Query batches theo nhiều tiêu chí (status, owner, all)  
+✅ **History tracking** - Theo dõi lịch sử thay đổi của batch  
+✅ **Input validation** - Validate tất cả inputs để đảm bảo data integrity  
+✅ **Pagination support** - Hỗ trợ pagination cho các query functions
 
 ## 📋 Yêu cầu hệ thống
 
@@ -98,8 +102,8 @@ peer lifecycle chaincode querycommitted --channelID mychannel
 | MSP Role | Vai trò | Quyền hạn |
 |----------|---------|-----------|
 | **Farmer** (Org1MSP) | Nông dân | Tạo lô trà, cập nhật status |
-| **Verifier** (Org2MSP) | Kiểm định | Xác minh lô trà |
-| **Admin** (Org3MSP) | Quản trị | Cập nhật status, xác minh |
+| **Verifier** (Org1MSP) | Kiểm định | Xác minh lô trà |
+| **Admin** (Org1MSP) | Quản trị | Cập nhật status, xác minh |
 
 *Lưu ý: Có thể thay đổi trong msp-config.json*
 
@@ -135,26 +139,69 @@ CREATED → VERIFIED → EXPIRED
 - **Quyền**: Farmer
 - **Mô tả**: Tạo lô trà mới
 - **Parameters**:
-  - `batchId`: ID lô trà (unique)
-  - `farmLocation`: Vị trí nông trại
-  - `harvestDate`: Ngày thu hoạch (YYYY-MM-DD)
-  - `processingInfo`: Thông tin xử lý
-  - `qualityCert`: Chứng chỉ chất lượng
+  - `batchId`: ID lô trà (unique, alphanumeric + dash/underscore, max 100 chars)
+  - `farmLocation`: Vị trí nông trại (max 200 chars)
+  - `harvestDate`: Ngày thu hoạch (YYYY-MM-DD format)
+  - `processingInfo`: Thông tin xử lý (max 1000 chars)
+  - `qualityCert`: Chứng chỉ chất lượng (max 100 chars)
+- **Validation**: Tất cả parameters được validate trước khi xử lý
 
 ### verifyBatch(batchId, hashInput)
-- **Quyền**: Farmer, Verifier, Admin
+- **Quyền**: Farmer, Verifier, Admin (tất cả đều Org1MSP)
 - **Mô tả**: Xác minh hash của lô trà
+- **Parameters**:
+  - `batchId`: ID lô trà
+  - `hashInput`: Raw string để verify (format: `batchId|farmLocation|harvestDate|processingInfo|qualityCert`)
 - **Returns**: `{isValid: boolean, batch: TeaBatch}`
+- **Note**: `hashInput` sẽ được hash bằng SHA-256 trước khi so sánh với hash đã lưu
 
 ### getBatchInfo(batchId)
 - **Quyền**: Public
 - **Mô tả**: Xem thông tin lô trà
-- **Returns**: `TeaBatch` object
+- **Parameters**:
+  - `batchId`: ID lô trà
+- **Returns**: `TeaBatch | null` (null nếu không tồn tại)
 
 ### updateBatchStatus(batchId, status)
 - **Quyền**: Farmer, Admin
 - **Mô tả**: Cập nhật trạng thái lô trà
-- **Status**: CREATED, VERIFIED, EXPIRED
+- **Parameters**:
+  - `batchId`: ID lô trà
+  - `status`: Trạng thái mới (CREATED, VERIFIED, EXPIRED)
+- **Returns**: `TeaBatch` với status đã cập nhật
+
+### getAllBatches(limit?, offset?)
+- **Quyền**: Public
+- **Mô tả**: Query tất cả batches với pagination
+- **Parameters**:
+  - `limit`: Số lượng batches trả về (default: 100, max: 1000)
+  - `offset`: Số batches bỏ qua (default: 0)
+- **Returns**: `{batches: TeaBatch[], total: number}`
+
+### getBatchesByStatus(status, limit?, offset?)
+- **Quyền**: Public
+- **Mô tả**: Query batches theo trạng thái
+- **Parameters**:
+  - `status`: Trạng thái (CREATED, VERIFIED, EXPIRED)
+  - `limit`: Số lượng batches trả về (default: 100, max: 1000)
+  - `offset`: Số batches bỏ qua (default: 0)
+- **Returns**: `{batches: TeaBatch[], total: number}`
+
+### getBatchesByOwner(owner, limit?, offset?)
+- **Quyền**: Public
+- **Mô tả**: Query batches theo owner (MSP ID)
+- **Parameters**:
+  - `owner`: MSP ID của owner
+  - `limit`: Số lượng batches trả về (default: 100, max: 1000)
+  - `offset`: Số batches bỏ qua (default: 0)
+- **Returns**: `{batches: TeaBatch[], total: number}`
+
+### getBatchHistory(batchId)
+- **Quyền**: Public
+- **Mô tả**: Lấy lịch sử thay đổi của batch (tất cả transactions)
+- **Parameters**:
+  - `batchId`: ID lô trà
+- **Returns**: `TeaBatch[]` (array các version của batch, oldest first)
 
 ## 🔧 Ví dụ Sử dụng
 
@@ -168,8 +215,10 @@ peer chaincode invoke -C mychannel -n teaTraceCC \
 
 ### Xác minh lô trà
 ```bash
+# hashInput format: batchId|farmLocation|harvestDate|processingInfo|qualityCert
+# Chaincode sẽ hash input này và so sánh với hash đã lưu
 peer chaincode invoke -C mychannel -n teaTraceCC \
-  -c '{"Args":["verifyBatch","BATCH001","hashInputString"]}'
+  -c '{"Args":["verifyBatch","BATCH001","BATCH001|Moc Chau, Son La|2024-11-08|Organic processing|VN-ORG-2024"]}'
 ```
 
 ### Cập nhật trạng thái
@@ -182,6 +231,30 @@ peer chaincode invoke -C mychannel -n teaTraceCC \
 ```bash
 peer chaincode query -C mychannel -n teaTraceCC \
   -c '{"Args":["getBatchInfo","BATCH001"]}'
+```
+
+### Query tất cả batches
+```bash
+peer chaincode query -C mychannel -n teaTraceCC \
+  -c '{"Args":["getAllBatches","50","0"]}'
+```
+
+### Query batches theo status
+```bash
+peer chaincode query -C mychannel -n teaTraceCC \
+  -c '{"Args":["getBatchesByStatus","VERIFIED","50","0"]}'
+```
+
+### Query batches theo owner
+```bash
+peer chaincode query -C mychannel -n teaTraceCC \
+  -c '{"Args":["getBatchesByOwner","Org1MSP","50","0"]}'
+```
+
+### Lấy lịch sử batch
+```bash
+peer chaincode query -C mychannel -n teaTraceCC \
+  -c '{"Args":["getBatchHistory","BATCH001"]}'
 ```
 
 ## ⚠️ Lưu ý

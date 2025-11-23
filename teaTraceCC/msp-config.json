@@ -5,11 +5,11 @@
       "description": "Farmer - create tea batches"
     },
     "verifier": {
-      "mspId": "Org2MSP",
+      "mspId": "Org1MSP",
       "description": "Verifier - verify tea batches"
     },
     "admin": {
-      "mspId": "Org3MSP",
+      "mspId": "Org1MSP",
       "description": "Admin - manage batch status"
     }
   }

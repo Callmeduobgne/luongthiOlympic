@@ -1,3 +1,17 @@
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package cache
 
 import (
@@ -115,6 +129,28 @@ func (s *Service) Increment(ctx context.Context, key string) (int64, error) {
 	return val, nil
 }
 
+// Decrement decrements a counter (never returns negative)
+func (s *Service) Decrement(ctx context.Context, key string) (int64, error) {
+	val, err := s.client.Decr(ctx, key).Result()
+	if err != nil {
+		if err == redis.Nil {
+			return 0, nil
+		}
+		s.logger.Error("Failed to decrement", zap.String("key", key), zap.Error(err))
+		return 0, err
+	}
+
+	// If the counter drops below zero, clean up the key
+	if val <= 0 {
+		if delErr := s.client.Del(ctx, key).Err(); delErr != nil {
+			s.logger.Warn("Failed to delete key after decrement", zap.String("key", key), zap.Error(delErr))
+		}
+		return 0, nil
+	}
+
+	return val, nil
+}
+
 // Expire sets expiration on a key
 func (s *Service) Expire(ctx context.Context, key string, expiration time.Duration) error {
 	err := s.client.Expire(ctx, key, expiration).Err()
@@ -173,4 +209,3 @@ func (s *Service) Close() error {
 func (s *Service) Health(ctx context.Context) error {
 	return s.client.Ping(ctx).Err()
 }
-

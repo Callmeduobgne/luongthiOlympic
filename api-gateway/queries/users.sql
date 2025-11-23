@@ -42,3 +42,7 @@ SELECT * FROM users
 WHERE role = $1
 ORDER BY created_at DESC;
 
+-- name: GetUserByUsernameOrEmail :one
+-- Search by username or email
+SELECT * FROM users WHERE username = $1 OR email = $1 LIMIT 1;
+

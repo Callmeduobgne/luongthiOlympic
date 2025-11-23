@@ -1,0 +1,30 @@
+# File: monitoring/prometheus/recording_rules.yml
+# Recording Rules for Performance Optimization
+
+groups:
+  - name: performance_metrics
+    interval: 30s
+    rules:
+      # Pre-calculate CPU usage
+      - record: instance:node_cpu_utilization:rate5m
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      # Pre-calculate memory usage
+      - record: instance:node_memory_utilization:ratio
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      # Pre-calculate disk usage
+      - record: instance:node_disk_utilization:ratio
+        expr: 1 - (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})
+
+      # API request rate
+      - record: job:http_requests:rate5m
+        expr: sum by (job, status) (rate(http_requests_total[5m]))
+
+      # API latency percentiles
+      - record: job:http_request_duration:p95
+        expr: histogram_quantile(0.95, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      - record: job:http_request_duration:p99
+        expr: histogram_quantile(0.99, sum by (job, le) (rate(http_request_duration_seconds_bucket[5m])))
+

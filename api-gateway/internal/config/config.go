@@ -1,3 +1,17 @@
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package config
 
 import (
@@ -10,16 +24,19 @@ import (
 
 // Config holds all configuration for the application
 type Config struct {
-	Server   ServerConfig   `mapstructure:"server"`
-	Database DatabaseConfig `mapstructure:"database"`
-	Redis    RedisConfig    `mapstructure:"redis"`
-	Fabric   FabricConfig   `mapstructure:"fabric"`
-	JWT      JWTConfig      `mapstructure:"jwt"`
-	RateLimit RateLimitConfig `mapstructure:"ratelimit"`
+	Server         ServerConfig         `mapstructure:"server"`
+	Database       DatabaseConfig       `mapstructure:"database"`
+	Redis          RedisConfig          `mapstructure:"redis"`
+	Fabric         FabricConfig         `mapstructure:"fabric"`
+	CA             CAConfig             `mapstructure:"ca"`
+	JWT            JWTConfig            `mapstructure:"jwt"`
+	RateLimit      RateLimitConfig      `mapstructure:"ratelimit"`
 	CircuitBreaker CircuitBreakerConfig `mapstructure:"circuitbreaker"`
-	OpenTelemetry OpenTelemetryConfig `mapstructure:"otel"`
-	Logging  LoggingConfig  `mapstructure:"logging"`
-	CORS     CORSConfig     `mapstructure:"cors"`
+	OpenTelemetry  OpenTelemetryConfig  `mapstructure:"otel"`
+	Logging        LoggingConfig        `mapstructure:"logging"`
+	CORS           CORSConfig           `mapstructure:"cors"`
+	WebSocket      WebSocketConfig      `mapstructure:"websocket"`
+	Upstream       UpstreamConfig       `mapstructure:"upstream"`
 }
 
 // ServerConfig holds server configuration
@@ -97,6 +114,25 @@ type CORSConfig struct {
 	AllowCredentials bool     `mapstructure:"allow_credentials"`
 }
 
+// WebSocketConfig holds WebSocket configuration
+type WebSocketConfig struct {
+	AllowedOrigins        []string      `mapstructure:"allowed_origins"`
+	MaxConnections        int           `mapstructure:"max_connections" validate:"min=1"`
+	MaxConnectionsPerIP   int           `mapstructure:"max_connections_per_ip" validate:"min=1"`
+	MaxConnectionsPerUser int           `mapstructure:"max_connections_per_user" validate:"min=1"`
+	PingInterval          time.Duration `mapstructure:"ping_interval" validate:"required"`
+	PongTimeout           time.Duration `mapstructure:"pong_timeout" validate:"required"`
+	EnableCompression     bool          `mapstructure:"enable_compression"`
+	RateLimitEnabled      bool          `mapstructure:"rate_limit_enabled"`
+	RateLimitMessages     int           `mapstructure:"rate_limit_messages" validate:"min=1"`
+	RateLimitWindow       time.Duration `mapstructure:"rate_limit_window" validate:"required"`
+}
+
+// UpstreamConfig holds upstream service configuration
+type UpstreamConfig struct {
+	BackendBaseURL string `mapstructure:"backend_base_url" validate:"required,url"`
+}
+
 // DSN returns the database connection string
 func (d *DatabaseConfig) DSN() string {
 	return fmt.Sprintf(
@@ -134,7 +170,7 @@ func Load() (*Config, error) {
 
 	// Unmarshal config
 	var config Config
-	
+
 	// Server
 	config.Server.Port = viper.GetInt("GATEWAY_PORT")
 	config.Server.Host = viper.GetString("GATEWAY_HOST")
@@ -166,6 +202,18 @@ func Load() (*Config, error) {
 	config.Fabric.UserCertPath = viper.GetString("FABRIC_USER_CERT_PATH")
 	config.Fabric.UserKeyPath = viper.GetString("FABRIC_USER_KEY_PATH")
 	config.Fabric.PeerTLSCAPath = viper.GetString("FABRIC_PEER_TLS_CA_PATH")
+	config.Fabric.AdditionalPeers = viper.GetStringSlice("FABRIC_ADDITIONAL_PEERS")
+	config.Fabric.Orderers = viper.GetStringSlice("FABRIC_ORDERERS")
+	config.Fabric.CAEndpoints = viper.GetStringSlice("FABRIC_CA_ENDPOINTS")
+
+	// CA (optional - for future CA server integration)
+	config.CA.URL = viper.GetString("FABRIC_CA_URL")
+	config.CA.CAName = viper.GetString("FABRIC_CA_NAME")
+	config.CA.TLSCertPath = viper.GetString("FABRIC_CA_TLS_CERT_PATH")
+	config.CA.MSPDir = viper.GetString("FABRIC_CA_MSP_DIR")
+	config.CA.AdminUser = viper.GetString("FABRIC_CA_ADMIN_USER")
+	config.CA.AdminPass = viper.GetString("FABRIC_CA_ADMIN_PASS")
+	config.CA.MSPID = viper.GetString("FABRIC_MSP_ID")
 
 	// JWT
 	config.JWT.Secret = viper.GetString("JWT_SECRET")
@@ -202,10 +250,42 @@ func Load() (*Config, error) {
 	config.CORS.MaxAge = viper.GetInt("CORS_MAX_AGE")
 	config.CORS.AllowCredentials = viper.GetBool("CORS_ALLOW_CREDENTIALS")
 
+	// WebSocket
+	config.WebSocket.AllowedOrigins = viper.GetStringSlice("WEBSOCKET_ALLOWED_ORIGINS")
+	config.WebSocket.MaxConnections = viper.GetInt("WEBSOCKET_MAX_CONNECTIONS")
+	config.WebSocket.MaxConnectionsPerIP = viper.GetInt("WEBSOCKET_MAX_CONNECTIONS_PER_IP")
+	config.WebSocket.MaxConnectionsPerUser = viper.GetInt("WEBSOCKET_MAX_CONNECTIONS_PER_USER")
+	config.WebSocket.PingInterval = viper.GetDuration("WEBSOCKET_PING_INTERVAL")
+	config.WebSocket.PongTimeout = viper.GetDuration("WEBSOCKET_PONG_TIMEOUT")
+	config.WebSocket.EnableCompression = viper.GetBool("WEBSOCKET_ENABLE_COMPRESSION")
+	config.WebSocket.RateLimitEnabled = viper.GetBool("WEBSOCKET_RATE_LIMIT_ENABLED")
+	config.WebSocket.RateLimitMessages = viper.GetInt("WEBSOCKET_RATE_LIMIT_MESSAGES")
+	config.WebSocket.RateLimitWindow = viper.GetDuration("WEBSOCKET_RATE_LIMIT_WINDOW")
+
+	// Upstream services
+	config.Upstream.BackendBaseURL = viper.GetString("BACKEND_BASE_URL")
+
 	// Validate config
 	validate := validator.New()
 	if err := validate.Struct(&config); err != nil {
 		return nil, fmt.Errorf("config validation failed: %w", err)
+	}
+
+	// Security warnings for production
+	if config.Server.Env == "production" {
+		// Check JWT_SECRET strength
+		weakSecrets := []string{
+			"your-super-secret-jwt-key-change-this-in-production-min-32-chars",
+			"ibn-network-production-secret-2024-change-this",
+			"change-this",
+			"secret",
+			"default",
+		}
+		for _, weak := range weakSecrets {
+			if config.JWT.Secret == weak || len(config.JWT.Secret) < 32 {
+				return nil, fmt.Errorf("SECURITY WARNING: JWT_SECRET is too weak or uses default value. Please use a strong, random secret (min 32 characters) in production")
+			}
+		}
 	}
 
 	return &config, nil
@@ -265,5 +345,19 @@ func setDefaults() {
 	viper.SetDefault("CORS_EXPOSED_HEADERS", []string{"Link"})
 	viper.SetDefault("CORS_MAX_AGE", 300)
 	viper.SetDefault("CORS_ALLOW_CREDENTIALS", true)
-}
 
+	// WebSocket defaults
+	viper.SetDefault("WEBSOCKET_ALLOWED_ORIGINS", []string{}) // Empty = allow all (development)
+	viper.SetDefault("WEBSOCKET_MAX_CONNECTIONS", 1000)
+	viper.SetDefault("WEBSOCKET_MAX_CONNECTIONS_PER_IP", 10)
+	viper.SetDefault("WEBSOCKET_MAX_CONNECTIONS_PER_USER", 5)
+	viper.SetDefault("WEBSOCKET_PING_INTERVAL", "30s")
+	viper.SetDefault("WEBSOCKET_PONG_TIMEOUT", "60s")
+	viper.SetDefault("WEBSOCKET_ENABLE_COMPRESSION", true)
+	viper.SetDefault("WEBSOCKET_RATE_LIMIT_ENABLED", true)
+	viper.SetDefault("WEBSOCKET_RATE_LIMIT_MESSAGES", 100)
+	viper.SetDefault("WEBSOCKET_RATE_LIMIT_WINDOW", "1m")
+
+	// Upstream defaults
+	viper.SetDefault("BACKEND_BASE_URL", "http://ibn-backend:8080")
+}

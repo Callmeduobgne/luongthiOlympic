@@ -1,7 +1,22 @@
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 package middleware
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"time"
@@ -13,11 +28,17 @@ import (
 	"go.uber.org/zap"
 )
 
+// AuthService interface for validating API keys
+type AuthService interface {
+	ValidateAPIKey(ctx context.Context, apiKey string) (*models.UserInfo, error)
+}
+
 // AuthMiddleware provides authentication middleware
 type AuthMiddleware struct {
-	jwtSecret []byte
-	issuer    string
-	logger    *zap.Logger
+	jwtSecret  []byte
+	issuer     string
+	logger     *zap.Logger
+	authService AuthService // Optional: for API key validation
 }
 
 // NewAuthMiddleware creates a new auth middleware
@@ -29,32 +50,78 @@ func NewAuthMiddleware(cfg *config.JWTConfig, logger *zap.Logger) *AuthMiddlewar
 	}
 }
 
-// Authenticate validates JWT token
+// SetAuthService sets the auth service for API key validation
+func (m *AuthMiddleware) SetAuthService(authService AuthService) {
+	m.authService = authService
+}
+
+// Authenticate validates JWT token or API key
 func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Extract token from Authorization header
+		var userInfo *models.UserInfo
+		var err error
+
+		// Try API key first (X-API-Key header)
+		apiKey := r.Header.Get("X-API-Key")
+		if apiKey != "" && m.authService != nil {
+			userInfo, err = m.authService.ValidateAPIKey(r.Context(), apiKey)
+			if err == nil && userInfo != nil {
+				// API key is valid, add user info to context
+				ctx := context.WithValue(r.Context(), "userID", userInfo.ID)
+				ctx = context.WithValue(ctx, "email", userInfo.Email)
+				ctx = context.WithValue(ctx, "mspId", userInfo.MSPId)
+				ctx = context.WithValue(ctx, "role", userInfo.Role)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			// If API key validation failed, continue to try JWT
+		}
+
+		// Try JWT token from multiple sources:
+		// 1. Authorization header (Bearer <token>)
+		// 2. Query parameter (?token=...)
+		var tokenString string
+		
+		// First, try Authorization header
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
+		if authHeader != "" {
+			// Check if it starts with "Bearer "
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				tokenString = parts[1]
+			}
+		}
+		
+		// If no token from header, try query parameter (for WebSocket)
+		if tokenString == "" {
+			tokenString = r.URL.Query().Get("token")
+			if tokenString != "" {
+				m.logger.Debug("Token found in query parameter",
+					zap.String("path", r.URL.Path),
+					zap.String("query", r.URL.RawQuery),
+				)
+			}
+		}
+
+		// If still no token, return error
+		if tokenString == "" {
+			m.logger.Warn("No token found in header or query parameter",
+				zap.String("path", r.URL.Path),
+				zap.String("query", r.URL.RawQuery),
+				zap.String("auth_header", authHeader),
+			)
+			// For WebSocket requests, return plain HTTP error (don't write JSON)
+			if r.Header.Get("Upgrade") == "websocket" {
+				http.Error(w, "Unauthorized: Missing token", http.StatusUnauthorized)
+				return
+			}
 			respondJSON(w, http.StatusUnauthorized, models.NewErrorResponse(
 				models.ErrCodeUnauthorized,
-				"Missing authorization header",
+				"Missing authorization header, API key, or token query parameter",
 				nil,
 			))
 			return
 		}
-
-		// Check if it starts with "Bearer "
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			respondJSON(w, http.StatusUnauthorized, models.NewErrorResponse(
-				models.ErrCodeUnauthorized,
-				"Invalid authorization header format",
-				nil,
-			))
-			return
-		}
-
-		tokenString := parts[1]
 
 		// Parse and validate token
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
@@ -150,6 +217,9 @@ func (m *AuthMiddleware) GenerateRefreshToken() (string, error) {
 func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	// Note: In production, use a proper JSON encoder
+	if payload != nil {
+		// Use json encoder
+		json.NewEncoder(w).Encode(payload)
+	}
 }
 
