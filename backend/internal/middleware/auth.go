@@ -89,6 +89,7 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), "user_id", claims.UserID)
 		ctx = context.WithValue(ctx, "user_email", claims.Email)
 		ctx = context.WithValue(ctx, "user_role", claims.Role)
+		ctx = context.WithValue(ctx, "jwt_token", tokenString) // Add JWT token for Gateway
 		if claims.MSPID != nil {
 			ctx = context.WithValue(ctx, "user_msp_id", *claims.MSPID)
 		}

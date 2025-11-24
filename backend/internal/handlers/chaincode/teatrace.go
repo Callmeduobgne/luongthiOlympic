@@ -26,8 +26,9 @@ import (
 
 // TeaTraceHandler handles HTTP requests for TeaTrace chaincode
 type TeaTraceHandler struct {
-	service chaincode.TeaTraceService // Use interface to support both implementations
-	logger  *zap.Logger
+	service      chaincode.TeaTraceService // Use interface to support both implementations
+	verifyService *chaincode.VerifyService // Service for hash verification
+	logger       *zap.Logger
 }
 
 // NewTeaTraceHandler creates a new TeaTrace handler
@@ -35,6 +36,15 @@ func NewTeaTraceHandler(service chaincode.TeaTraceService, logger *zap.Logger) *
 	return &TeaTraceHandler{
 		service: service,
 		logger:  logger,
+	}
+}
+
+// NewTeaTraceHandlerWithVerify creates a new TeaTrace handler with verify service
+func NewTeaTraceHandlerWithVerify(service chaincode.TeaTraceService, verifyService *chaincode.VerifyService, logger *zap.Logger) *TeaTraceHandler {
+	return &TeaTraceHandler{
+		service:       service,
+		verifyService: verifyService,
+		logger:        logger,
 	}
 }
 
@@ -59,7 +69,15 @@ func (h *TeaTraceHandler) CreateBatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	txID, err := h.service.CreateBatch(r.Context(), req.BatchID, req.FarmName, req.HarvestDate, req.Certification, req.CertificateID)
+	// Check if JWT token is in context
+	ctx := r.Context()
+	if token, ok := ctx.Value("jwt_token").(string); ok {
+		h.logger.Info("JWT token found in context", zap.String("token_preview", token[:20]+"..."))
+	} else {
+		h.logger.Warn("No JWT token in context for CreateBatch")
+	}
+	
+	txID, err := h.service.CreateBatch(ctx, req.BatchID, req.FarmName, req.HarvestDate, req.Certification, req.CertificateID)
 	if err != nil {
 		h.logger.Error("Failed to create batch", zap.Error(err))
 		http.Error(w, "Failed to create batch", http.StatusInternalServerError)
@@ -154,6 +172,50 @@ func (h *TeaTraceHandler) VerifyBatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// CreatePackage handles creating a new tea package
+// POST /api/v1/teatrace/packages
+func (h *TeaTraceHandler) CreatePackage(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		PackageID     string  `json:"package_id" validate:"required"`
+		BatchID       string  `json:"batch_id" validate:"required"`
+		Weight        float64 `json:"weight" validate:"required,gt=0"`
+		ProductionDate string `json:"production_date" validate:"required"`
+		ExpiryDate    string  `json:"expiry_date,omitempty"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if validationErrors := utils.ValidateStruct(&req); validationErrors != nil {
+		h.logger.Warn("Validation failed", zap.Any("errors", validationErrors))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":   "Validation failed",
+			"details": validationErrors,
+		})
+		return
+	}
+
+	txID, err := h.service.CreatePackage(r.Context(), req.PackageID, req.BatchID, req.Weight, req.ProductionDate, req.ExpiryDate)
+	if err != nil {
+		h.logger.Error("Failed to create package", zap.Error(err))
+		http.Error(w, "Failed to create package: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(map[string]string{
+		"tx_id":     txID,
+		"package_id": req.PackageID,
+		"message":   "Package created successfully",
+	})
+}
+
 // UpdateBatchStatus handles updating the status of a tea batch
 func (h *TeaTraceHandler) UpdateBatchStatus(w http.ResponseWriter, r *http.Request) {
 	batchID := chi.URLParam(r, "batchId")
@@ -211,6 +273,50 @@ func (h *TeaTraceHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{
 		"status":  "healthy",
 		"message": "Chaincode is operational",
+	})
+}
+
+// VerifyByHash handles product verification by hash/blockhash
+// POST /api/v1/teatrace/verify-by-hash
+func (h *TeaTraceHandler) VerifyByHash(w http.ResponseWriter, r *http.Request) {
+	if h.verifyService == nil {
+		h.logger.Error("VerifyService not initialized")
+		http.Error(w, "Service unavailable", http.StatusInternalServerError)
+		return
+	}
+
+	var req chaincode.VerifyByHashRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate request
+	if validationErrors := utils.ValidateStruct(&req); validationErrors != nil {
+		h.logger.Warn("Validation failed", zap.Any("errors", validationErrors))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error":   "Validation failed",
+			"details": validationErrors,
+		})
+		return
+	}
+
+	// Call verify service
+	result, err := h.verifyService.VerifyByHash(r.Context(), req.Hash)
+	if err != nil {
+		h.logger.Error("Failed to verify hash", zap.Error(err))
+		http.Error(w, "Failed to verify hash", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    result,
 	})
 }
 

@@ -24,4 +24,5 @@ export { Badge } from './Badge'
 export { Spinner } from './Spinner'
 export { Select } from './Select'
 export { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from './Table'
+export { QRCodeDisplay } from './QRCodeDisplay'
 

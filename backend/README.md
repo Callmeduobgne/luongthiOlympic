@@ -13,10 +13,11 @@ Backend API cho IBN Network - Blockchain traceability system sử dụng Hyperle
   - Refresh token mechanism
 
 - **Blockchain Integration**
-  - Kết nối với Hyperledger Fabric network
-  - TeaTrace chaincode integration
+  - Kết nối với Hyperledger Fabric network qua API Gateway
+  - TeaTrace chaincode integration (batches & packages)
   - Transaction management
   - Query/Invoke operations
+  - API Key authentication cho service-to-service communication
 
 - **Caching Strategy**
   - Multi-layer cache (L1: Memory, L2: Redis, L3: PostgreSQL)
@@ -32,6 +33,12 @@ Backend API cho IBN Network - Blockchain traceability system sử dụng Hyperle
   - Event subscriptions
   - Webhook delivery với retry
   - WebSocket support (planned)
+
+- **QR Code Generation**
+  - Generate QR code cho batches và packages
+  - Support PNG và base64 format
+  - Auto-detect từ transaction ID
+  - Frontend-ready component
 
 ## 🚀 Quick Start
 
@@ -141,6 +148,16 @@ curl http://localhost:9090/api/v1/teatrace/health \
 | GET | `/api/v1/teatrace/batches/{id}` | Get batch by ID |
 | POST | `/api/v1/teatrace/batches/{id}/verify` | Verify batch |
 | PUT | `/api/v1/teatrace/batches/{id}/status` | Update status |
+| POST | `/api/v1/teatrace/packages` | Create tea package |
+| GET | `/api/v1/teatrace/packages/{id}` | Get package by ID |
+
+#### QR Code Generation
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/qrcode/batches/{batchId}` | Generate QR code PNG for batch |
+| GET | `/api/v1/qrcode/batches/{batchId}/base64` | Get QR code base64 data URI |
+| GET | `/api/v1/qrcode/packages/{packageId}` | Generate QR code PNG for package |
+| GET | `/api/v1/qrcode/transactions/{txId}` | Generate QR code from transaction (auto-detect) |
 
 #### Blockchain Operations
 | Method | Endpoint | Description |

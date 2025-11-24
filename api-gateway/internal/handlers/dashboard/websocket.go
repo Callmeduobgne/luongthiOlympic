@@ -294,6 +294,9 @@ func (h *DashboardWebSocketHandler) Handle(w http.ResponseWriter, r *http.Reques
 
 // sendInitialData sends initial dashboard data
 func (h *DashboardWebSocketHandler) sendInitialData(conn *websocket.Conn, channelName string) error {
+	// Production best practice: Set write deadline
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -331,6 +334,9 @@ func (h *DashboardWebSocketHandler) sendInitialData(conn *websocket.Conn, channe
 
 // sendUpdates sends periodic updates
 func (h *DashboardWebSocketHandler) sendUpdates(conn *websocket.Conn, channelName string) error {
+	// Production best practice: Set write deadline
+	conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 

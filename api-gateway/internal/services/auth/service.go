@@ -453,12 +453,6 @@ func (s *Service) GenerateAPIKey(ctx context.Context, userID string, req *models
 		}
 	}
 
-	// Set rate limit (default 1000)
-	rateLimit := int32(1000)
-	if req.RateLimit > 0 {
-		rateLimit = int32(req.RateLimit)
-	}
-
 	// Set expiration
 	var expiresAt pgtype.Timestamptz
 	if req.ExpiresIn > 0 {
@@ -474,7 +468,6 @@ func (s *Service) GenerateAPIKey(ctx context.Context, userID string, req *models
 		KeyHash:     keyHash,
 		Name:        pgtype.Text{String: req.Name, Valid: true},
 		Permissions: permissionsJSON,
-		RateLimit:   pgtype.Int4{Int32: rateLimit, Valid: true},
 		ExpiresAt:   expiresAt,
 	})
 	if err != nil {

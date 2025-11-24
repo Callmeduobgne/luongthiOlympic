@@ -17,6 +17,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -63,18 +64,47 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 
 		// Try API key first (X-API-Key header)
 		apiKey := r.Header.Get("X-API-Key")
-		if apiKey != "" && m.authService != nil {
-			userInfo, err = m.authService.ValidateAPIKey(r.Context(), apiKey)
-			if err == nil && userInfo != nil {
-				// API key is valid, add user info to context
-				ctx := context.WithValue(r.Context(), "userID", userInfo.ID)
-				ctx = context.WithValue(ctx, "email", userInfo.Email)
-				ctx = context.WithValue(ctx, "mspId", userInfo.MSPId)
-				ctx = context.WithValue(ctx, "role", userInfo.Role)
-				next.ServeHTTP(w, r.WithContext(ctx))
-				return
+		if apiKey != "" {
+			m.logger.Info("API key found in request",
+				zap.String("path", r.URL.Path),
+				zap.String("key_preview", apiKey[:20]+"..."),
+				zap.Bool("auth_service_set", m.authService != nil),
+			)
+			if m.authService != nil {
+				userInfo, err = m.authService.ValidateAPIKey(r.Context(), apiKey)
+				if err == nil && userInfo != nil {
+					m.logger.Info("API key validated successfully",
+						zap.String("user_id", userInfo.ID),
+						zap.String("email", userInfo.Email),
+					)
+					// API key is valid, add user info to context
+					ctx := context.WithValue(r.Context(), "userID", userInfo.ID)
+					ctx = context.WithValue(ctx, "email", userInfo.Email)
+					ctx = context.WithValue(ctx, "mspId", userInfo.MSPId)
+					ctx = context.WithValue(ctx, "role", userInfo.Role)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				m.logger.Warn("API key validation failed",
+					zap.String("path", r.URL.Path),
+					zap.Error(err),
+				)
+			} else {
+				m.logger.Warn("API key found but authService is nil",
+					zap.String("path", r.URL.Path),
+				)
 			}
 			// If API key validation failed, continue to try JWT
+		} else {
+			// Debug: Log all headers to see what we receive
+			headerList := []string{}
+			for k, v := range r.Header {
+				headerList = append(headerList, fmt.Sprintf("%s=%v", k, v))
+			}
+			m.logger.Info("No API key in request - checking headers",
+				zap.String("path", r.URL.Path),
+				zap.String("headers", strings.Join(headerList, "; ")),
+			)
 		}
 
 		// Try JWT token from multiple sources:
@@ -152,14 +182,17 @@ func (m *AuthMiddleware) Authenticate(next http.Handler) http.Handler {
 			return
 		}
 
-		// Validate issuer
-		if iss, ok := claims["iss"].(string); !ok || iss != m.issuer {
-			respondJSON(w, http.StatusUnauthorized, models.NewErrorResponse(
-				models.ErrCodeUnauthorized,
-				"Invalid token issuer",
-				nil,
-			))
-			return
+		// Validate issuer (accept both backend and gateway issuers for service-to-service communication)
+		if iss, ok := claims["iss"].(string); ok {
+			// Accept both "ibn-network" (backend) and "ibn-api-gateway" (gateway) issuers
+			if iss != m.issuer && iss != "ibn-network" {
+				respondJSON(w, http.StatusUnauthorized, models.NewErrorResponse(
+					models.ErrCodeUnauthorized,
+					"Invalid token issuer",
+					nil,
+				))
+				return
+			}
 		}
 
 		// Add user info to context

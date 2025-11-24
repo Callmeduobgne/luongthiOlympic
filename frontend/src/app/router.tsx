@@ -22,15 +22,24 @@ import { ExplorerPage } from '@features/explorer/pages/ExplorerPage'
 import { AnalyticsPage } from '@features/analytics/pages/AnalyticsPage'
 import { NetworkPage } from '@features/network/pages/NetworkPage'
 import { SettingsPage } from '@features/settings/pages/SettingsPage'
+import { Page } from '@features/page/pages/Page'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
+  {
+    path: '/',
+    element: <Page />,
+  },
+  {
+    path: '/page',
+    element: <Page />,
+  },
   {
     path: '/login',
     element: <AuthPage />,
   },
   {
-    path: '/',
+    path: '/dashboard',
     element: (
       <ProtectedRoute>
         <Dashboard />

@@ -54,46 +54,54 @@ type Config struct {
 	ChannelName string // e.g., "ibnchannel"
 }
 
-// NewClient creates a new Fabric Gateway client
+// NewClient creates a new Fabric Gateway client with enhanced connection management
 func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
-	// Load credentials
-	tlsCert, err := loadTLSCertificate(cfg)
+	ctx := context.Background()
+	
+	// Create connection manager with retry logic
+	connManager, err := NewConnectionManager(cfg, logger)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load TLS certificate: %w", err)
+		return nil, fmt.Errorf("failed to create connection manager: %w", err)
 	}
 
-	// Create gRPC connection
-	grpcConn, err := grpc.Dial(cfg.PeerEndpoint, grpc.WithTransportCredentials(credentials.NewClientTLSFromCert(tlsCert, "")))
+	// Connect with retry
+	if err := connManager.Connect(ctx); err != nil {
+		return nil, fmt.Errorf("failed to connect to peer: %w", err)
+	}
+
+	// Get gRPC connection
+	grpcConn, err := connManager.GetConnection()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create gRPC connection: %w", err)
+		connManager.Close()
+		return nil, fmt.Errorf("failed to get connection: %w", err)
 	}
 
 	// Load identity
 	id, err := newIdentity(cfg)
 	if err != nil {
-		grpcConn.Close()
+		connManager.Close()
 		return nil, fmt.Errorf("failed to create identity: %w", err)
 	}
 
 	// Load signer
 	sign, err := newSign(cfg)
 	if err != nil {
-		grpcConn.Close()
+		connManager.Close()
 		return nil, fmt.Errorf("failed to create signer: %w", err)
 	}
 
-	// Create Gateway connection
+	// Create Gateway connection with enhanced timeouts for production
 	gateway, err := client.Connect(
 		id,
 		client.WithSign(sign),
 		client.WithClientConnection(grpcConn),
-		client.WithEvaluateTimeout(5*time.Second),
-		client.WithEndorseTimeout(15*time.Second),
-		client.WithSubmitTimeout(30*time.Second),
-		client.WithCommitStatusTimeout(60*time.Second),
+		client.WithEvaluateTimeout(10*time.Second),
+		client.WithEndorseTimeout(30*time.Second),
+		client.WithSubmitTimeout(60*time.Second),
+		client.WithCommitStatusTimeout(120*time.Second),
 	)
 	if err != nil {
-		grpcConn.Close()
+		connManager.Close()
 		return nil, fmt.Errorf("failed to connect to gateway: %w", err)
 	}
 
@@ -103,10 +111,23 @@ func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
 	// Get default contract (teaTraceCC)
 	contract := network.GetContract("teaTraceCC")
 
+	// Create health checker
+	healthChecker := NewHealthChecker(connManager, logger)
+	
+	// Wait for healthy connection
+	healthCtx, healthCancel := context.WithTimeout(ctx, 30*time.Second)
+	defer healthCancel()
+	
+	if err := healthChecker.WaitForHealthy(healthCtx, 30*time.Second); err != nil {
+		logger.Warn("Health check timeout, continuing anyway", zap.Error(err))
+		// Continue even if health check times out
+	}
+
 	logger.Info("Connected to Fabric network",
 		zap.String("channel", cfg.ChannelName),
 		zap.String("msp_id", cfg.MSPID),
 		zap.String("peer", cfg.PeerEndpoint),
+		zap.String("state", connManager.GetConnectionState().String()),
 	)
 
 	return &Client{

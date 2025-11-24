@@ -92,6 +92,7 @@ VITE_API_BASE_URL=http://localhost:9090
 - `Button` - Button với variants (primary, secondary, danger, ghost)
 - `Input` - Input field với validation
 - `Card` - Card component
+- `QRCodeDisplay` - QR code display với download support
 
 ### Usage Example
 
@@ -129,6 +130,11 @@ API client được cấu hình với:
 - Auto token injection
 - Auto token refresh on 401
 - Error handling với toast notifications
+
+### QR Code API
+- `GET /api/v1/qrcode/batches/{batchId}/base64` - Lấy QR code base64 cho batch
+- `GET /api/v1/qrcode/packages/{packageId}/base64` - Lấy QR code base64 cho package
+- `GET /api/v1/qrcode/transactions/{txId}` - Lấy QR code từ transaction ID
 
 **Example:**
 

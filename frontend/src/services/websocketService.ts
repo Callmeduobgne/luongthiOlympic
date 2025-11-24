@@ -26,12 +26,15 @@ export interface DashboardUpdate {
 class WebSocketService {
   private socket: WebSocket | null = null
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
+  private maxReconnectAttempts = 10 // Increased for production
   private reconnectTimeout: number | null = null
   private isConnecting = false
   private isManualDisconnect = false
   private currentChannel: string | null = null
   private currentToken: string | null = null
+  private pingInterval: number | null = null
+  private reconnectDelay = 1000 // Initial delay: 1s
+  private maxReconnectDelay = 30000 // Max delay: 30s
 
   connect(channel: string, token: string): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
@@ -90,14 +93,19 @@ class WebSocketService {
         : (typeof window !== 'undefined' && window.location?.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + (typeof window !== 'undefined' ? window.location.host : '')
 
       // Use native WebSocket - pass token as query param
-      // Backend will extract token from Authorization header or query param
+      // Backend endpoint: /api/v1/dashboard/ws/{channel}
       const ws = new WebSocket(`${wsURL}/api/v1/dashboard/ws/${channel}?token=${encodeURIComponent(token)}`)
 
       ws.onopen = () => {
         console.log('✅ WebSocket connected to dashboard', channel)
         this.reconnectAttempts = 0
+        this.reconnectDelay = 1000 // Reset delay on successful connection
         this.socket = ws
         this.isConnecting = false
+        
+        // Production best practice: Start heartbeat/ping interval
+        this.startHeartbeat()
+        
         resolve(ws)
       }
 
@@ -111,26 +119,38 @@ class WebSocketService {
         console.log('🔌 WebSocket disconnected', { code: event.code, reason: event.reason })
         this.socket = null
         this.isConnecting = false
+        this.stopHeartbeat()
 
         // Only auto-reconnect if not manually disconnected and connection was established
         if (!this.isManualDisconnect && event.code !== 1000) {
-          // Auto-reconnect logic (only if not manually disconnected)
+          // Production best practice: Exponential backoff for reconnection
           if (this.reconnectAttempts < this.maxReconnectAttempts && this.currentChannel && this.currentToken) {
             this.reconnectAttempts++
-            console.log(`🔄 Reconnecting... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
+            
+            // Exponential backoff: delay = min(initialDelay * 2^(attempts-1), maxDelay)
+            const delay = Math.min(
+              this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
+              this.maxReconnectDelay
+            )
+            
+            console.log(`🔄 Reconnecting in ${delay}ms... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             this.reconnectTimeout = window.setTimeout(() => {
               if (!this.isManualDisconnect && this.currentChannel && this.currentToken) {
                 this.connect(this.currentChannel, this.currentToken).catch((err) => {
                   console.error('Reconnection failed:', err)
                 })
               }
-            }, 1000 * this.reconnectAttempts)
+            }, delay)
           } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.warn('⚠️ Max reconnection attempts reached')
+            // Reset after max attempts to allow manual retry
+            this.reconnectAttempts = 0
+            this.reconnectDelay = 1000
           }
         } else {
           // Reset reconnect attempts on manual disconnect
           this.reconnectAttempts = 0
+          this.reconnectDelay = 1000
         }
       }
 
@@ -157,6 +177,9 @@ class WebSocketService {
       this.reconnectTimeout = null
     }
 
+    // Stop heartbeat
+    this.stopHeartbeat()
+
     if (this.socket) {
       // Remove event handlers to prevent reconnect
       this.socket.onclose = null
@@ -167,8 +190,33 @@ class WebSocketService {
     this.currentChannel = null
     this.currentToken = null
     this.reconnectAttempts = 0
+    this.reconnectDelay = 1000
     this.isConnecting = false
     console.log('🔌 WebSocket manually disconnected')
+  }
+
+  // Production best practice: Heartbeat/ping to keep connection alive
+  private startHeartbeat() {
+    this.stopHeartbeat() // Clear any existing interval
+    
+    // Send ping every 30 seconds (server expects pong)
+    this.pingInterval = window.setInterval(() => {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        try {
+          // Send ping message (server will respond with pong)
+          this.socket.send(JSON.stringify({ type: 'ping' }))
+        } catch (err) {
+          console.error('Failed to send ping:', err)
+        }
+      }
+    }, 30000) // 30 seconds
+  }
+
+  private stopHeartbeat() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval)
+      this.pingInterval = null
+    }
   }
 
   isConnected(): boolean {

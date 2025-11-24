@@ -35,9 +35,9 @@ const isWrappedResponse = (payload: unknown): payload is WrappedAuthResponse => 
 
 export const authService = {
   async login(credentials: LoginRequest): Promise<AuthResponse> {
-    // API Gateway expects 'username' field (can be email or username)
+    // Backend expects 'email' field (not username)
     const requestBody = {
-      username: credentials.email, // Use email as username
+      email: credentials.email,
       password: credentials.password,
     }
     
@@ -67,18 +67,42 @@ export const authService = {
           success: wrappedPayload ? wrappedPayload.success : undefined,
           hasData: wrappedPayload ? !!wrappedPayload.data : !!directPayload?.user,
           hasToken: wrappedPayload ? !!wrappedPayload.data?.accessToken : !!directPayload?.accessToken,
+          payloadKeys: Object.keys(payload || {}),
+          payload: payload, // Log full payload for debugging
         })
       }
       
       // API Gateway wraps response in { success: true, data: {...} }
       // Handle both wrapped and unwrapped responses
+      // Backend returns snake_case (access_token) but frontend expects camelCase (accessToken)
       let authData: AuthResponse
       if (wrappedPayload) {
         authData = wrappedPayload.data
-      } else if (directPayload?.accessToken) {
-        authData = directPayload
+      } else if (directPayload) {
+        // Handle both camelCase and snake_case formats
+        const payload = directPayload as any
+        authData = {
+          accessToken: payload.accessToken || payload.access_token,
+          refreshToken: payload.refreshToken || payload.refresh_token,
+          expiresAt: payload.expiresAt || payload.expires_at,
+          user: payload.user,
+        }
       } else {
+        // Debug: Log the actual payload structure
+        if (import.meta.env.DEV) {
+          console.error('❌ [DEV] Invalid response format. Payload:', payload)
+          console.error('❌ [DEV] Payload type:', typeof payload)
+          console.error('❌ [DEV] Payload keys:', payload ? Object.keys(payload) : 'null')
+        }
         throw new Error('Invalid response format from server')
+      }
+      
+      // Validate that we have required fields
+      if (!authData.accessToken) {
+        if (import.meta.env.DEV) {
+          console.error('❌ [DEV] No accessToken found in response:', authData)
+        }
+        throw new Error('Invalid response format: missing accessToken')
       }
       
       // Store tokens

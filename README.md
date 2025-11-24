@@ -233,6 +233,9 @@ curl http://localhost:9090/health | jq '.'
 - `verifyBatch` - Xác minh hash của lô trà
 - `getBatchInfo` - Query thông tin lô trà
 - `updateBatchStatus` - Cập nhật trạng thái
+- `createPackage` - Tạo gói trà từ batch
+- `verifyPackage` - Xác minh gói trà với blockhash
+- `getPackageInfo` - Query thông tin gói trà
 - MSP-based authorization (Farmer, Verifier, Admin)
 - SHA-256 hash verification
 
@@ -394,6 +397,32 @@ Authorization: Bearer <token>
   "certification": "Organic",
   "certificate_id": "CERT-001"
 }
+
+# Create package
+POST http://localhost:9090/api/v1/teatrace/packages
+Authorization: Bearer <token>
+{
+  "package_id": "PKG001",
+  "batch_id": "BATCH001",
+  "weight": 500.0,
+  "production_date": "2024-11-14"
+}
+```
+
+### QR Code Generation
+
+```bash
+# Get QR code PNG for batch
+GET http://localhost:9090/api/v1/qrcode/batches/{batchId}
+Authorization: Bearer <token>
+
+# Get QR code base64 (for frontend)
+GET http://localhost:9090/api/v1/qrcode/batches/{batchId}/base64
+Authorization: Bearer <token>
+
+# Get QR code from transaction ID (auto-detect batch/package)
+GET http://localhost:9090/api/v1/qrcode/transactions/{txId}
+Authorization: Bearer <token>
 ```
 
 ## 🛠️ Development
@@ -644,11 +673,18 @@ docker exec -it peer0.org1.ibn.vn peer channel join -b /path/to/channel.block
 ## 🔐 Security
 
 - JWT authentication với refresh tokens
-- API key support
+- API Key authentication cho service-to-service (Backend → Gateway)
 - TLS encryption cho Fabric connections
 - MSP-based identity management
 - Rate limiting
 - Audit logging
+
+## 📱 QR Code & Verification
+
+- **QR Code Generation**: Tự động generate QR code từ batch/package/transaction
+- **QR Code Content**: Chứa batchId/packageId, verificationHash/blockHash, verifyUrl, txId
+- **Frontend Integration**: Component `QRCodeDisplay` để hiển thị và download QR code
+- **Verification**: User có thể scan QR code để verify nguồn gốc trên blockchain
 
 ## 📝 License
 

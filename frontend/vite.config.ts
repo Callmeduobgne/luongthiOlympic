@@ -31,9 +31,10 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        // Trong Docker: proxy tới api-gateway-nginx (load balancer)
-        // Trong local dev: proxy tới localhost:8085 (gateway nginx)
-        target: process.env.VITE_API_BASE_URL || 'http://api-gateway-nginx:80',
+        // Trong Docker: proxy tới backend container (ibn-backend:8080)
+        // Trong local dev: proxy trực tiếp tới backend (localhost:9090)
+        // Sử dụng env variable VITE_API_BASE_URL từ docker-compose hoặc mặc định
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:9090',
         changeOrigin: true,
         ws: true, // Enable WebSocket for both HMR and API WebSocket endpoints
         rewrite: (path) => path, // Keep original path

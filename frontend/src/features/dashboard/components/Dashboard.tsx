@@ -36,6 +36,7 @@ import toast from 'react-hot-toast'
 
 export const Dashboard = () => {
   const [networkInfo, setNetworkInfo] = useState<NetworkInfo | null>(null)
+  // WebSocket enabled by default (backend now has endpoint)
   const [useWebSocket, setUseWebSocket] = useState(true)
 
   // WebSocket connection for real-time updates
@@ -50,7 +51,11 @@ export const Dashboard = () => {
   // Always enable polling queries (they will be used as fallback or primary source)
   const { data: metricsPolling, isLoading: metricsLoading, isError: metricsError } = useQuery({
     queryKey: ['dashboard-metrics'],
-    queryFn: () => dashboardService.getMetricsSummary('ibnchannel'),
+    queryFn: async () => {
+      const result = await dashboardService.getMetricsSummary('ibnchannel')
+      // Ensure we return a value, not undefined
+      return result || null
+    },
     refetchInterval: shouldUsePolling ? 60000 : false, // Poll every 60s if using polling
     staleTime: 30000,
     enabled: true, // Always enabled, will be used as fallback

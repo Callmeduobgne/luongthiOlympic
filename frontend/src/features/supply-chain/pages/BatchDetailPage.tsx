@@ -15,10 +15,11 @@
  */
 
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Package, MapPin, Calendar, CheckCircle } from 'lucide-react'
+import { ArrowLeft, Package, MapPin, Calendar, CheckCircle, QrCode } from 'lucide-react'
 import { Button } from '@shared/components/ui/Button'
 import { Card } from '@shared/components/ui/Card'
 import { Badge } from '@shared/components/ui/Badge'
+import { QRCodeDisplay } from '@shared/components/ui/QRCodeDisplay'
 import { LoadingState } from '@shared/components/common/LoadingState'
 import { EmptyState } from '@shared/components/common/EmptyState'
 import { useBatch, useUpdateBatchStatus } from '../hooks/useBatches'
@@ -32,6 +33,7 @@ export const BatchDetailPage = () => {
   const { batchId } = useParams<{ batchId: string }>()
   const navigate = useNavigate()
   const [showStatusModal, setShowStatusModal] = useState(false)
+  const [showQRModal, setShowQRModal] = useState(false)
   const [selectedStatus, setSelectedStatus] = useState<string>('')
 
   const { data: batch, isLoading, error } = useBatch(batchId || '')
@@ -205,13 +207,21 @@ export const BatchDetailPage = () => {
               </p>
             </div>
 
-            <div className="pt-4 border-t border-white/10">
+            <div className="pt-4 border-t border-white/10 space-y-2">
               <Button
                 variant="secondary"
                 onClick={() => setShowStatusModal(true)}
                 className="w-full"
               >
                 Update Status
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => setShowQRModal(true)}
+                className="w-full"
+              >
+                <QrCode className="h-4 w-4 mr-2" />
+                View QR Code
               </Button>
             </div>
           </div>
@@ -264,6 +274,33 @@ export const BatchDetailPage = () => {
               className="flex-1"
             >
               Update
+            </Button>
+          </div>
+          </div>
+        </Modal>
+
+      {/* QR Code Modal */}
+      <Modal
+        isOpen={showQRModal}
+        onClose={() => setShowQRModal(false)}
+        title="QR Code - Batch Verification"
+      >
+        <div className="space-y-4 text-white">
+          <p className="text-sm text-gray-300 text-center">
+            Scan this QR code to verify the batch authenticity on the blockchain
+          </p>
+          {batchId && (
+            <div className="flex justify-center">
+              <QRCodeDisplay batchId={batchId} size={256} showDownload />
+            </div>
+          )}
+          <div className="pt-4 border-t border-white/10">
+            <Button
+              variant="secondary"
+              onClick={() => setShowQRModal(false)}
+              className="w-full"
+            >
+              Close
             </Button>
           </div>
         </div>

@@ -53,13 +53,11 @@ type ApiKey struct {
 	KeyHash     string             `json:"key_hash"`
 	Name        pgtype.Text        `json:"name"`
 	Permissions []byte             `json:"permissions"`
-	RateLimit   pgtype.Int4        `json:"rate_limit"`
 	IsActive    pgtype.Bool        `json:"is_active"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	LastUsedAt  pgtype.Timestamptz `json:"last_used_at"`
 	CreatedAt   pgtype.Timestamptz `json:"created_at"`
 	Description pgtype.Text        `json:"description"`
-	AllowedIps  []netip.Addr       `json:"allowed_ips"`
 }
 
 type AuditLog struct {

@@ -37,9 +37,9 @@ func (q *Queries) CountAPIKeysByUser(ctx context.Context, db DBTX, userID pgtype
 }
 
 const createAPIKey = `-- name: CreateAPIKey :one
-INSERT INTO api_keys (user_id, key_hash, name, permissions, rate_limit, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips
+INSERT INTO api_keys (user_id, key_hash, name, permissions, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description
 `
 
 type CreateAPIKeyParams struct {
@@ -47,7 +47,6 @@ type CreateAPIKeyParams struct {
 	KeyHash     string             `json:"key_hash"`
 	Name        pgtype.Text        `json:"name"`
 	Permissions []byte             `json:"permissions"`
-	RateLimit   pgtype.Int4        `json:"rate_limit"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
@@ -57,7 +56,6 @@ func (q *Queries) CreateAPIKey(ctx context.Context, db DBTX, arg CreateAPIKeyPar
 		arg.KeyHash,
 		arg.Name,
 		arg.Permissions,
-		arg.RateLimit,
 		arg.ExpiresAt,
 	)
 	var i ApiKey
@@ -67,13 +65,11 @@ func (q *Queries) CreateAPIKey(ctx context.Context, db DBTX, arg CreateAPIKeyPar
 		&i.KeyHash,
 		&i.Name,
 		&i.Permissions,
-		&i.RateLimit,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.Description,
-		&i.AllowedIps,
 	)
 	return i, err
 }
@@ -97,7 +93,7 @@ func (q *Queries) DeleteAPIKeysByUser(ctx context.Context, db DBTX, userID pgtyp
 }
 
 const getAPIKey = `-- name: GetAPIKey :one
-SELECT id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips FROM api_keys WHERE id = $1 LIMIT 1
+SELECT id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description FROM api_keys WHERE id = $1 LIMIT 1
 `
 
 func (q *Queries) GetAPIKey(ctx context.Context, db DBTX, id pgtype.UUID) (ApiKey, error) {
@@ -109,19 +105,17 @@ func (q *Queries) GetAPIKey(ctx context.Context, db DBTX, id pgtype.UUID) (ApiKe
 		&i.KeyHash,
 		&i.Name,
 		&i.Permissions,
-		&i.RateLimit,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.Description,
-		&i.AllowedIps,
 	)
 	return i, err
 }
 
 const getAPIKeyByHash = `-- name: GetAPIKeyByHash :one
-SELECT id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips FROM api_keys WHERE key_hash = $1 LIMIT 1
+SELECT id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description FROM api_keys WHERE key_hash = $1 LIMIT 1
 `
 
 func (q *Queries) GetAPIKeyByHash(ctx context.Context, db DBTX, keyHash string) (ApiKey, error) {
@@ -133,19 +127,17 @@ func (q *Queries) GetAPIKeyByHash(ctx context.Context, db DBTX, keyHash string) 
 		&i.KeyHash,
 		&i.Name,
 		&i.Permissions,
-		&i.RateLimit,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.Description,
-		&i.AllowedIps,
 	)
 	return i, err
 }
 
 const getActiveAPIKeys = `-- name: GetActiveAPIKeys :many
-SELECT id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips FROM api_keys
+SELECT id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description FROM api_keys
 WHERE is_active = TRUE
 AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)
 ORDER BY created_at DESC
@@ -166,13 +158,11 @@ func (q *Queries) GetActiveAPIKeys(ctx context.Context, db DBTX) ([]ApiKey, erro
 			&i.KeyHash,
 			&i.Name,
 			&i.Permissions,
-			&i.RateLimit,
 			&i.IsActive,
 			&i.ExpiresAt,
 			&i.LastUsedAt,
 			&i.CreatedAt,
 			&i.Description,
-			&i.AllowedIps,
 		); err != nil {
 			return nil, err
 		}
@@ -185,7 +175,7 @@ func (q *Queries) GetActiveAPIKeys(ctx context.Context, db DBTX) ([]ApiKey, erro
 }
 
 const listAPIKeys = `-- name: ListAPIKeys :many
-SELECT id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips FROM api_keys
+SELECT id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description FROM api_keys
 WHERE user_id = $1
 ORDER BY created_at DESC
 `
@@ -205,13 +195,11 @@ func (q *Queries) ListAPIKeys(ctx context.Context, db DBTX, userID pgtype.UUID) 
 			&i.KeyHash,
 			&i.Name,
 			&i.Permissions,
-			&i.RateLimit,
 			&i.IsActive,
 			&i.ExpiresAt,
 			&i.LastUsedAt,
 			&i.CreatedAt,
 			&i.Description,
-			&i.AllowedIps,
 		); err != nil {
 			return nil, err
 		}
@@ -228,17 +216,15 @@ UPDATE api_keys
 SET 
     name = COALESCE($1, name),
     permissions = COALESCE($2, permissions),
-    rate_limit = COALESCE($3, rate_limit),
-    is_active = COALESCE($4, is_active),
-    expires_at = COALESCE($5, expires_at)
-WHERE id = $6
-RETURNING id, user_id, key_hash, name, permissions, rate_limit, is_active, expires_at, last_used_at, created_at, description, allowed_ips
+    is_active = COALESCE($3, is_active),
+    expires_at = COALESCE($4, expires_at)
+WHERE id = $5
+RETURNING id, user_id, key_hash, name, permissions, is_active, expires_at, last_used_at, created_at, description
 `
 
 type UpdateAPIKeyParams struct {
 	Name        pgtype.Text        `json:"name"`
 	Permissions []byte             `json:"permissions"`
-	RateLimit   pgtype.Int4        `json:"rate_limit"`
 	IsActive    pgtype.Bool        `json:"is_active"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 	ID          pgtype.UUID        `json:"id"`
@@ -248,7 +234,6 @@ func (q *Queries) UpdateAPIKey(ctx context.Context, db DBTX, arg UpdateAPIKeyPar
 	row := db.QueryRow(ctx, updateAPIKey,
 		arg.Name,
 		arg.Permissions,
-		arg.RateLimit,
 		arg.IsActive,
 		arg.ExpiresAt,
 		arg.ID,
@@ -260,13 +245,11 @@ func (q *Queries) UpdateAPIKey(ctx context.Context, db DBTX, arg UpdateAPIKeyPar
 		&i.KeyHash,
 		&i.Name,
 		&i.Permissions,
-		&i.RateLimit,
 		&i.IsActive,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
 		&i.CreatedAt,
 		&i.Description,
-		&i.AllowedIps,
 	)
 	return i, err
 }

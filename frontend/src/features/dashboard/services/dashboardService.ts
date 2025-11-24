@@ -70,16 +70,31 @@ export const dashboardService = {
     return response.data.data
   },
 
-  async getLatestBlocks(channel: string, limit: number = 10): Promise<Block[]> {
-    const response = await api.get<{ success: boolean; data: Block[] }>(
-      `${API_ENDPOINTS.BLOCKS.LIST(channel)}?limit=${limit}`
-    )
-    return response.data.data || []
+  async getLatestBlocks(_channel: string, _limit: number = 10): Promise<Block[]> {
+    // Backend doesn't have list blocks endpoint, only get by number
+    // Use channel info to get latest block number, then fetch recent blocks
+    try {
+      await api.get(API_ENDPOINTS.BLOCKS.CHANNEL_INFO)
+      // Channel info contains blockchain info, but we need to parse it
+      // For now, return empty array to avoid errors
+      // TODO: Implement logic to fetch blocks by number from latest to latest-limit
+      if (import.meta.env.DEV) {
+        console.warn('[DEV] getLatestBlocks: Backend only supports GetBlockByNumber, not ListBlocks')
+      }
+      return []
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error('[DEV] Failed to get channel info for blocks:', error)
+      }
+      return []
+    }
   },
 
   async getNetworkInfo(): Promise<NetworkInfo> {
-    const response = await api.get<{ success: boolean; data: any }>(
-      API_ENDPOINTS.NETWORK.INFO
+    // Backend doesn't have /api/v1/network/info
+    // Use blockchain channel info instead
+    const response = await api.get<any>(
+      API_ENDPOINTS.BLOCKS.CHANNEL_INFO
     )
     const data = response.data.data
     // Ensure data is properly formatted

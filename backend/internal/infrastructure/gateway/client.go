@@ -119,13 +119,25 @@ func (c *Client) SubmitTransaction(ctx context.Context, req *transaction.Gateway
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	
+	// Priority: API Key (from env) > JWT Token (from context)
+	// API Key is preferred for service-to-service communication
 	if c.apiKey != "" {
 		httpReq.Header.Set("X-API-Key", c.apiKey)
-	}
-
-	// Get JWT token from context if available (for user context)
-	if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {
+		c.logger.Info("Using API key for Gateway authentication",
+			zap.String("key_preview", c.apiKey[:20]+"..."),
+			zap.String("url", url),
+		)
+	} else if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {
+		// Fallback to JWT token if API key is not available
 		httpReq.Header.Set("Authorization", "Bearer "+token)
+		c.logger.Debug("Using JWT token for Gateway authentication",
+			zap.String("token_preview", token[:20]+"..."),
+		)
+	} else {
+		c.logger.Warn("No authentication method available for Gateway request",
+			zap.String("url", url),
+		)
 	}
 
 	// Send user certificate to Gateway (required for Fabric authentication)
@@ -267,8 +279,11 @@ func (c *Client) QueryChaincode(ctx context.Context, channelName, chaincodeName,
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
+	// Priority: API Key (from env) > JWT Token (from context)
 	if c.apiKey != "" {
 		httpReq.Header.Set("X-API-Key", c.apiKey)
+	} else if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {

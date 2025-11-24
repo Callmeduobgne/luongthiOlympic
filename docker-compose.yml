@@ -563,7 +563,7 @@ services:
       FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
       FABRIC_CHANNEL_NAME: ibnchannel
       JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
-      JWT_ISSUER: ibn-network
+      JWT_ISSUER: ibn-api-gateway
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 168h
       OPA_ENABLED: 'true'
@@ -581,7 +581,7 @@ services:
       # NOTE: GATEWAY_ENABLED MUST be true - Backend cannot connect directly to Fabric
       GATEWAY_ENABLED: 'true'
       GATEWAY_BASE_URL: http://api-gateway-nginx:80
-      GATEWAY_API_KEY: ''
+      GATEWAY_API_KEY: 'ibn_cac199e566e647626bcd36169a3a231d3c4d895d9a391fdeadd3db9b98366f16'
       GATEWAY_TIMEOUT: 30s
       # Admin Service configuration (for chaincode lifecycle operations)
       ADMIN_SERVICE_ENABLED: 'true'
@@ -652,6 +652,8 @@ services:
     - /app/node_modules
     environment:
     - NODE_ENV=development
+    - DOCKER_ENV=true
+    - VITE_API_BASE_URL=http://ibn-backend:8080
     networks:
     - ibn-network
     - logging

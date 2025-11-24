@@ -35,3 +35,18 @@ type UpdateBatchStatusRequest struct {
 	Status  string `json:"status" validate:"required,oneof=CREATED VERIFIED PROCESSED SHIPPED DELIVERED"`
 }
 
+// VerifyByHashRequest represents a request to verify product by hash/blockhash
+type VerifyByHashRequest struct {
+	Hash string `json:"hash" validate:"required,min=1,max=128"`
+}
+
+// VerifyByHashResponse represents the response for hash verification
+type VerifyByHashResponse struct {
+	IsValid      bool   `json:"is_valid"`
+	Message      string `json:"message"`
+	TransactionID string `json:"transaction_id,omitempty"`
+	BatchID      string `json:"batch_id,omitempty"`
+	PackageID    string `json:"package_id,omitempty"`
+	EntityType   string `json:"entity_type,omitempty"` // "transaction", "batch", "package"
+}
+

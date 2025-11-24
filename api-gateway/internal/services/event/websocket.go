@@ -46,6 +46,9 @@ type WebSocketManager struct {
 	logger      *zap.Logger
 	mu          sync.RWMutex
 	upgrader    websocket.Upgrader
+	shutdown    chan struct{} // Channel to signal shutdown
+	shutdownMu  sync.Mutex
+	isShutdown  bool
 }
 
 // SSEClient represents a Server-Sent Events client
@@ -61,6 +64,7 @@ func NewWebSocketManager(logger *zap.Logger) *WebSocketManager {
 		connections: make(map[string]*websocket.Conn),
 		sseClients:  make(map[string]*SSEClient),
 		logger:      logger,
+		shutdown:    make(chan struct{}),
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -193,6 +197,15 @@ func (m *WebSocketManager) handlePingPong(subscriptionID string, conn *websocket
 
 	for {
 		select {
+		case <-m.shutdown:
+			// Graceful shutdown: close connection
+			m.logger.Info("Closing WebSocket connection due to shutdown",
+				zap.String("subscription_id", subscriptionID),
+			)
+			_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server shutting down"))
+			m.UnregisterWebSocketConnection(subscriptionID)
+			return
+
 		case <-ticker.C:
 			conn.SetWriteDeadline(time.Now().Add(writeWait))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
@@ -210,5 +223,51 @@ func (m *WebSocketManager) handlePingPong(subscriptionID string, conn *websocket
 // GetUpgrader returns the WebSocket upgrader
 func (m *WebSocketManager) GetUpgrader() websocket.Upgrader {
 	return m.upgrader
+}
+
+// Shutdown gracefully shuts down all WebSocket and SSE connections
+// Production best practice: Clean shutdown to prevent connection leaks
+func (m *WebSocketManager) Shutdown() error {
+	m.shutdownMu.Lock()
+	if m.isShutdown {
+		m.shutdownMu.Unlock()
+		return nil
+	}
+	m.isShutdown = true
+	close(m.shutdown)
+	m.shutdownMu.Unlock()
+
+	m.logger.Info("Shutting down WebSocket manager")
+
+	// Close all WebSocket connections
+	m.mu.Lock()
+	connCount := len(m.connections)
+	for subscriptionID, conn := range m.connections {
+		m.logger.Info("Closing WebSocket connection",
+			zap.String("subscription_id", subscriptionID),
+		)
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server shutting down"))
+		conn.Close()
+	}
+	m.connections = make(map[string]*websocket.Conn)
+
+	// Close all SSE clients
+	sseCount := len(m.sseClients)
+	for subscriptionID, client := range m.sseClients {
+		m.logger.Info("Closing SSE client",
+			zap.String("subscription_id", subscriptionID),
+		)
+		close(client.Channel)
+		close(client.Done)
+	}
+	m.sseClients = make(map[string]*SSEClient)
+	m.mu.Unlock()
+
+	m.logger.Info("WebSocket manager shutdown complete",
+		zap.Int("websocket_connections", connCount),
+		zap.Int("sse_clients", sseCount),
+	)
+
+	return nil
 }
 

@@ -71,3 +71,52 @@ export function validatePagination(limit: number, offset: number): void {
   }
 }
 
+/**
+ * Validate package ID format
+ */
+export function validatePackageId(packageId: string): void {
+  if (!packageId || packageId.trim().length === 0) {
+    throw new Error("Package ID cannot be empty");
+  }
+  if (packageId.length > 100) {
+    throw new Error("Package ID must be less than 100 characters");
+  }
+  // Allow alphanumeric, dash, underscore
+  if (!/^[a-zA-Z0-9_-]+$/.test(packageId)) {
+    throw new Error("Package ID can only contain alphanumeric characters, dashes, and underscores");
+  }
+}
+
+/**
+ * Validate weight (must be positive number)
+ */
+export function validateWeight(weight: number): void {
+  if (weight <= 0) {
+    throw new Error("Weight must be greater than 0");
+  }
+  if (weight > 100000) {
+    throw new Error("Weight must be less than 100000 grams (100 kg)");
+  }
+}
+
+/**
+ * Validate date range (expiryDate must be after productionDate)
+ */
+export function validateDateRange(productionDate: string, expiryDate?: string): void {
+  if (!expiryDate) {
+    return; // Optional field
+  }
+  
+  const prodDate = new Date(productionDate);
+  const expDate = new Date(expiryDate);
+  
+  if (isNaN(prodDate.getTime()) || isNaN(expDate.getTime())) {
+    throw new Error("Invalid date format");
+  }
+  
+  if (expDate <= prodDate) {
+    throw new Error("Expiry date must be after production date");
+  }
+}
+
+

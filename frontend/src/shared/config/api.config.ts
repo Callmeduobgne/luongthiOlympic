@@ -14,28 +14,30 @@
  * limitations under the License.
  */
 
-// In production (Docker), use relative URL (nginx will proxy /api to api-gateway)
-// In development, use Vite proxy (relative URL) hoặc service name
+// Frontend → Backend (port 9090) → Gateway (port 8080/8085) → Fabric
+// Frontend KHÔNG gọi Gateway trực tiếp, chỉ gọi Backend
+// Backend sẽ tự gọi Gateway khi cần blockchain operations
 const getBaseURL = () => {
   const envUrl = import.meta.env.VITE_API_BASE_URL
-  // Nếu có env variable và là container name, dùng relative URL để Vite proxy xử lý
-  if (envUrl && envUrl.includes('api-gateway-nginx')) {
-    return '' // Dùng relative URL, Vite proxy sẽ forward đến api-gateway-nginx
+  // Nếu có env variable và là backend URL, dùng nó
+  if (envUrl && envUrl.includes('localhost:9090')) {
+    return envUrl // Trong dev, có thể dùng trực tiếp backend URL
   }
-  // Nếu env variable là localhost, cũng dùng relative URL để Vite proxy xử lý
-  if (envUrl && envUrl.includes('localhost')) {
+  // Nếu có env variable và là container name (Docker), dùng relative URL
+  if (envUrl && (envUrl.includes('api-gateway-nginx') || envUrl.includes('backend'))) {
     return '' // Dùng relative URL, Vite proxy sẽ forward
   }
+  // Nếu có env variable khác, dùng nó
   if (envUrl && !envUrl.includes('localhost')) {
-    return envUrl // Chỉ dùng env URL nếu không phải localhost
+    return envUrl
   }
   // Production: use relative URL (nginx proxy)
   if (import.meta.env.PROD) {
     return ''
   }
-  // Development: ALWAYS use relative URL để Vite proxy xử lý (target: api-gateway-nginx:80)
-  // Vite proxy sẽ forward /api requests đến api-gateway-nginx:80
-  return '' // Dùng Vite proxy
+  // Development: ALWAYS use relative URL để Vite proxy xử lý
+  // Vite proxy đã được cấu hình trỏ tới backend (localhost:9090)
+  return '' // Dùng Vite proxy → Backend (9090)
 }
 
 export const API_CONFIG = {
@@ -51,30 +53,53 @@ export const API_ENDPOINTS = {
     UPLOAD_AVATAR: '/api/v1/auth/avatar',
   },
   METRICS: {
-    SUMMARY: '/api/v1/metrics/summary',
-    TRANSACTIONS: '/api/v1/metrics/transactions',
-    BLOCKS: '/api/v1/metrics/blocks',
-    PERFORMANCE: '/api/v1/metrics/performance',
-    PEERS: '/api/v1/metrics/peers',
+    // Backend endpoints: /api/v1/metrics/*
+    SUMMARY: '/api/v1/metrics/snapshot', // Backend uses 'snapshot' not 'summary'
+    ALL: '/api/v1/metrics', // Get all metrics
+    AGGREGATIONS: '/api/v1/metrics/aggregations', // Get aggregations
+    BY_NAME: '/api/v1/metrics/by-name', // Get metric by name (query param: ?name=...)
+    // Note: Backend doesn't have separate endpoints for transactions/blocks/performance/peers
+    // Use snapshot or aggregations instead
   },
   BLOCKS: {
-    LIST: (channel: string) => `/api/v1/blocks/${channel}`,
-    LATEST: (channel: string) => `/api/v1/blocks/${channel}/latest`,
-    GET: (channel: string, number: number) => `/api/v1/blocks/${channel}/${number}`,
+    // Backend endpoints: /api/v1/blockchain/blocks/{number}
+    // Note: Backend doesn't have list blocks endpoint, only get by number
+    LIST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
+    LATEST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
+    GET: (_channel: string, number: number) => `/api/v1/blockchain/blocks/${number}`,
+    GET_BY_TXID: (txid: string) => `/api/v1/blockchain/blocks/tx/${txid}`,
+    CHANNEL_INFO: '/api/v1/blockchain/channel/info',
   },
   NETWORK: {
-    INFO: '/api/v1/network/info',
-    CHANNELS: '/api/v1/network/channels',
-    CHANNEL_INFO: (name: string) => `/api/v1/network/channels/${name}`,
-    PEERS: '/api/v1/network/peers',
-    ORDERERS: '/api/v1/network/orderers',
-    LOGS: '/api/v1/network/logs',
+    // Backend only has /api/v1/network/logs
+    // Other endpoints use blockchain/channel/info as fallback
+    INFO: '/api/v1/blockchain/channel/info', // Use blockchain channel info
+    CHANNELS: '/api/v1/blockchain/channel/info', // Use blockchain channel info
+    CHANNEL_INFO: (_name: string) => `/api/v1/blockchain/channel/info`, // Use blockchain channel info
+    PEERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
+    ORDERERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
+    LOGS: '/api/v1/network/logs', // Backend has this endpoint
   },
   BATCHES: {
-    GET: (id: string) => `/api/v1/batches/${id}`,
-    CREATE: '/api/v1/batches',
-    VERIFY: (id: string) => `/api/v1/batches/${id}/verify`,
-    UPDATE_STATUS: (id: string) => `/api/v1/batches/${id}/status`,
+    // Backend uses /api/v1/teatrace/batches
+    GET: (id: string) => `/api/v1/teatrace/batches/${id}`,
+    CREATE: '/api/v1/teatrace/batches',
+    LIST: '/api/v1/teatrace/batches',
+    VERIFY: (id: string) => `/api/v1/teatrace/batches/${id}/verify`,
+    UPDATE_STATUS: (id: string) => `/api/v1/teatrace/batches/${id}/status`,
+    HEALTH: '/api/v1/teatrace/health',
+  },
+  QRCODE: {
+    // Batch QR codes
+    BATCH_PNG: (batchId: string) => `/api/v1/qrcode/batches/${batchId}`,
+    BATCH_BASE64: (batchId: string) => `/api/v1/qrcode/batches/${batchId}/base64`,
+    BATCH_DATA: (batchId: string) => `/api/v1/qrcode/batches/${batchId}/data`,
+    // Package QR codes
+    PACKAGE_PNG: (packageId: string) => `/api/v1/qrcode/packages/${packageId}`,
+    PACKAGE_BASE64: (packageId: string) => `/api/v1/qrcode/packages/${packageId}/base64`,
+    PACKAGE_DATA: (packageId: string) => `/api/v1/qrcode/packages/${packageId}/data`,
+    // Transaction QR code (auto-detect batch or package)
+    TRANSACTION: (txId: string) => `/api/v1/qrcode/transactions/${txId}`,
   },
   CHAINCODE: {
     INSTALLED: '/api/v1/chaincode/installed',
@@ -136,10 +161,16 @@ export const API_ENDPOINTS = {
     },
   },
   TRANSACTIONS: {
-    LIST: '/api/v1/transactions',
-    GET: (id: string) => `/api/v1/transactions/${id}`,
-    STATUS: (id: string) => `/api/v1/transactions/${id}/status`,
-    RECEIPT: (id: string) => `/api/v1/transactions/${id}/receipt`,
+    // Backend uses /api/v1/blockchain/transactions
+    LIST: '/api/v1/blockchain/transactions',
+    GET: (id: string) => `/api/v1/blockchain/transactions/${id}`,
+    GET_BY_TXID: (txid: string) => `/api/v1/blockchain/info/transaction/${txid}`,
+    HISTORY: (id: string) => `/api/v1/blockchain/transactions/${id}/history`,
+    GET_BY_TXID_ALT: (txid: string) => `/api/v1/blockchain/txid/${txid}`,
+    SUBMIT: '/api/v1/blockchain/transactions',
+    QUERY: '/api/v1/blockchain/query',
+    STATUS: (idOrTxID: string) => `/api/v1/blockchain/transactions/${idOrTxID}/status`,
+    RECEIPT: (idOrTxID: string) => `/api/v1/blockchain/transactions/${idOrTxID}/receipt`,
   },
   USERS: {
     LIST: '/api/v1/users',

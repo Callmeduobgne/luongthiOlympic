@@ -29,3 +29,18 @@ type TeaBatch struct {
 	UpdatedAt       time.Time `json:"updatedAt"`
 }
 
+// TeaPackage represents the tea package data model from teaTraceCC
+type TeaPackage struct {
+	PackageID     string     `json:"packageId"`
+	BatchID       string     `json:"batchId"`
+	BlockHash     string     `json:"blockHash"`
+	TxID          string     `json:"txId"`
+	Weight        float64    `json:"weight"`
+	ProductionDate string    `json:"productionDate"`
+	ExpiryDate    *string    `json:"expiryDate,omitempty"`
+	QRCode        *string    `json:"qrCode,omitempty"`
+	Status        string     `json:"status"`
+	Owner         string     `json:"owner"`
+	Timestamp     time.Time  `json:"timestamp"`
+}
+

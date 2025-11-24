@@ -251,3 +251,8 @@ type CacheWarmupItem struct {
 	TTLs  *CacheTTLs
 }
 
+// CheckRateLimit checks if rate limit is exceeded using L2 cache (Redis)
+func (m *MultiLayerCache) CheckRateLimit(ctx context.Context, key string, limit int, window time.Duration) (bool, error) {
+	return m.l2Cache.CheckRateLimit(ctx, key, limit, window)
+}
+

@@ -49,7 +49,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     label: 'Dashboard',
-    path: '/',
+    path: '/dashboard',
     icon: LayoutDashboard,
   },
   {
@@ -252,17 +252,28 @@ export const Header = ({}: HeaderProps) => {
         {/* Top bar: Logo + User menu */}
         <div className="flex h-16 items-center justify-between px-4 lg:px-6 text-white">
           {/* Left: Logo */}
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
+            aria-label="Go to Home Page"
+          >
             <div className="h-9 w-9 rounded-2xl border border-white/30 bg-white/10 flex items-center justify-center backdrop-blur">
               <span className="text-white font-bold text-sm tracking-wide">IBN</span>
             </div>
             <span className="font-semibold text-lg">
               IBN Network
             </span>
-          </div>
+          </button>
 
-          {/* Right: User menu */}
-          {isAuthenticated && (
+          {/* Right: User menu or Login button */}
+          {!isAuthenticated ? (
+            <button
+              onClick={() => navigate('/login')}
+              className="px-4 py-2 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 transition text-sm font-medium"
+            >
+              Đăng nhập
+            </button>
+          ) : (
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
@@ -298,6 +309,16 @@ export const Header = ({}: HeaderProps) => {
                       <button
                         onClick={() => {
                           setShowUserMenu(false)
+                          navigate('/dashboard')
+                        }}
+                        className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2 transition"
+                      >
+                        <LayoutDashboard className="h-4 w-4" />
+                        Dashboard
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowUserMenu(false)
                           setShowProfilePopup(true)
                         }}
                         className="w-full text-left px-4 py-2 text-sm text-gray-200 hover:bg-white/5 flex items-center gap-2 transition"
@@ -320,8 +341,8 @@ export const Header = ({}: HeaderProps) => {
           )}
         </div>
 
-        {/* Navigation menu: Horizontal, centered */}
-        {isAuthenticated && (
+        {/* Navigation menu: Horizontal, centered - Only show when authenticated and not on /page */}
+        {isAuthenticated && location.pathname !== '/page' && (
           <nav className="flex items-center justify-center border-t border-white/10 bg-black/40 backdrop-blur-xl">
             <div 
               ref={containerRef}

@@ -10,8 +10,8 @@ WHERE user_id = $1
 ORDER BY created_at DESC;
 
 -- name: CreateAPIKey :one
-INSERT INTO api_keys (user_id, key_hash, name, permissions, rate_limit, expires_at)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO api_keys (user_id, key_hash, name, permissions, expires_at)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdateAPIKey :one
@@ -19,7 +19,6 @@ UPDATE api_keys
 SET 
     name = COALESCE(sqlc.narg('name'), name),
     permissions = COALESCE(sqlc.narg('permissions'), permissions),
-    rate_limit = COALESCE(sqlc.narg('rate_limit'), rate_limit),
     is_active = COALESCE(sqlc.narg('is_active'), is_active),
     expires_at = COALESCE(sqlc.narg('expires_at'), expires_at)
 WHERE id = sqlc.arg('id')
