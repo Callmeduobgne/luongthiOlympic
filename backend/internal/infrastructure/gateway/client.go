@@ -324,3 +324,18 @@ func (c *Client) QueryChaincode(ctx context.Context, channelName, chaincodeName,
 	return resultJSON, nil
 }
 
+
+	if err := json.Unmarshal(body, &apiResp); err != nil {
+		// If not JSON, return raw body
+		return body, nil
+	}
+
+	// Extract result from data field
+	resultJSON, err := json.Marshal(apiResp.Data)
+	if err != nil {
+		return body, nil
+	}
+
+	return resultJSON, nil
+}
+

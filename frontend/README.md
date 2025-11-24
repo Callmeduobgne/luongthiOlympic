@@ -190,3 +190,9 @@ Kiểm tra:
 ## 📄 License
 
 Internal project - IBN Network
+
+3. Environment variables trong `.env`
+
+## 📄 License
+
+Internal project - IBN Network

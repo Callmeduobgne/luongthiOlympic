@@ -729,3 +729,39 @@ limitations under the License.
 **Version**: 1.0.0  
 **Last Updated**: November 2024
 
+
+1. **Tính Tương Thích Cao** - Tương thích với MIT, BSD, PostgreSQL License
+2. **Bảo Vệ Quyền Tác Giả** - Yêu cầu giữ nguyên copyright notice
+3. **Khuyến Khích Đóng Góp** - Cho phép tự do sử dụng, sửa đổi, phân phối
+4. **Phù Hợp Enterprise** - Được chấp nhận rộng rãi trong môi trường doanh nghiệp
+5. **Tuân Thủ OSI** - Được Open Source Initiative (OSI) phê duyệt
+
+**Xem chi tiết:** [LICENSE_NOTICE.md](LICENSE_NOTICE.md)
+
+### License Text
+
+```
+Copyright 2024 IBN Network (ICTU Blockchain Network)
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+```
+
+**License Type:** Apache 2.0 (OSI-approved Open Source License)  
+**Full License Text:** See [LICENSE](LICENSE) file in the root directory  
+**License Compatibility:** ✅ Tất cả dependencies đều tương thích (MIT, BSD, Apache 2.0, PostgreSQL License)
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: November 2024
+

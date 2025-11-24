@@ -271,3 +271,62 @@ func (m *WebSocketManager) Shutdown() error {
 	return nil
 }
 
+
+				m.UnregisterWebSocketConnection(subscriptionID)
+				return
+			}
+		}
+	}
+}
+
+// GetUpgrader returns the WebSocket upgrader
+func (m *WebSocketManager) GetUpgrader() websocket.Upgrader {
+	return m.upgrader
+}
+
+// Shutdown gracefully shuts down all WebSocket and SSE connections
+// Production best practice: Clean shutdown to prevent connection leaks
+func (m *WebSocketManager) Shutdown() error {
+	m.shutdownMu.Lock()
+	if m.isShutdown {
+		m.shutdownMu.Unlock()
+		return nil
+	}
+	m.isShutdown = true
+	close(m.shutdown)
+	m.shutdownMu.Unlock()
+
+	m.logger.Info("Shutting down WebSocket manager")
+
+	// Close all WebSocket connections
+	m.mu.Lock()
+	connCount := len(m.connections)
+	for subscriptionID, conn := range m.connections {
+		m.logger.Info("Closing WebSocket connection",
+			zap.String("subscription_id", subscriptionID),
+		)
+		_ = conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseGoingAway, "Server shutting down"))
+		conn.Close()
+	}
+	m.connections = make(map[string]*websocket.Conn)
+
+	// Close all SSE clients
+	sseCount := len(m.sseClients)
+	for subscriptionID, client := range m.sseClients {
+		m.logger.Info("Closing SSE client",
+			zap.String("subscription_id", subscriptionID),
+		)
+		close(client.Channel)
+		close(client.Done)
+	}
+	m.sseClients = make(map[string]*SSEClient)
+	m.mu.Unlock()
+
+	m.logger.Info("WebSocket manager shutdown complete",
+		zap.Int("websocket_connections", connCount),
+		zap.Int("sse_clients", sseCount),
+	)
+
+	return nil
+}
+

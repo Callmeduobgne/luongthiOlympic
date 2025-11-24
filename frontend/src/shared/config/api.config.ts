@@ -64,9 +64,9 @@ export const API_ENDPOINTS = {
   BLOCKS: {
     // Backend endpoints: /api/v1/blockchain/blocks/{number}
     // Note: Backend doesn't have list blocks endpoint, only get by number
-    LIST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
-    LATEST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
-    GET: (_channel: string, number: number) => `/api/v1/blockchain/blocks/${number}`,
+    LIST: (channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
+    LATEST: (channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
+    GET: (channel: string, number: number) => `/api/v1/blockchain/blocks/${number}`,
     GET_BY_TXID: (txid: string) => `/api/v1/blockchain/blocks/tx/${txid}`,
     CHANNEL_INFO: '/api/v1/blockchain/channel/info',
   },
@@ -75,7 +75,7 @@ export const API_ENDPOINTS = {
     // Other endpoints use blockchain/channel/info as fallback
     INFO: '/api/v1/blockchain/channel/info', // Use blockchain channel info
     CHANNELS: '/api/v1/blockchain/channel/info', // Use blockchain channel info
-    CHANNEL_INFO: (_name: string) => `/api/v1/blockchain/channel/info`, // Use blockchain channel info
+    CHANNEL_INFO: (name: string) => `/api/v1/blockchain/channel/info`, // Use blockchain channel info
     PEERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
     ORDERERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
     LOGS: '/api/v1/network/logs', // Backend has this endpoint
@@ -169,8 +169,33 @@ export const API_ENDPOINTS = {
     GET_BY_TXID_ALT: (txid: string) => `/api/v1/blockchain/txid/${txid}`,
     SUBMIT: '/api/v1/blockchain/transactions',
     QUERY: '/api/v1/blockchain/query',
-    STATUS: (idOrTxID: string) => `/api/v1/blockchain/transactions/${idOrTxID}/status`,
-    RECEIPT: (idOrTxID: string) => `/api/v1/blockchain/transactions/${idOrTxID}/receipt`,
+  },
+  USERS: {
+    LIST: '/api/v1/users',
+    GET: (id: string) => `/api/v1/users/${id}`,
+    ENROLL: '/api/v1/users/enroll',
+    REGISTER: '/api/v1/users/register',
+    REENROLL: (id: string) => `/api/v1/users/${id}/reenroll`,
+    REVOKE: (id: string) => `/api/v1/users/${id}/revoke`,
+    CERTIFICATE: (id: string) => `/api/v1/users/${id}/certificate`,
+  },
+} as const
+
+      LIST_EXECUTIONS: '/api/v1/chaincode/cicd/executions',
+      GET_EXECUTION: (id: string) => `/api/v1/chaincode/cicd/executions/${id}`,
+      GET_ARTIFACTS: (id: string) => `/api/v1/chaincode/cicd/executions/${id}/artifacts`,
+      PROCESS_WEBHOOK: (pipelineId: string) => `/api/v1/chaincode/cicd/webhooks/${pipelineId}`,
+    },
+  },
+  TRANSACTIONS: {
+    // Backend uses /api/v1/blockchain/transactions
+    LIST: '/api/v1/blockchain/transactions',
+    GET: (id: string) => `/api/v1/blockchain/transactions/${id}`,
+    GET_BY_TXID: (txid: string) => `/api/v1/blockchain/info/transaction/${txid}`,
+    HISTORY: (id: string) => `/api/v1/blockchain/transactions/${id}/history`,
+    GET_BY_TXID_ALT: (txid: string) => `/api/v1/blockchain/txid/${txid}`,
+    SUBMIT: '/api/v1/blockchain/transactions',
+    QUERY: '/api/v1/blockchain/query',
   },
   USERS: {
     LIST: '/api/v1/users',

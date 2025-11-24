@@ -212,3 +212,4 @@ func (m *AuthMiddleware) respondError(w http.ResponseWriter, status int, message
 	w.Write([]byte(`{"error":"` + message + `"}`))
 }
 
+

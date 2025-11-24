@@ -362,3 +362,20 @@ IBN Development Team
 
 **Version**: 1.0.0  
 **Last Updated**: November 2025
+
+- **Blockchain**: Hyperledger Fabric 2.5
+- **Logging**: Zap
+- **Authentication**: JWT (golang-jwt/jwt/v5)
+
+## 📄 License
+
+Copyright © 2024 IBN Network
+
+## 👥 Contributors
+
+IBN Development Team
+
+---
+
+**Version**: 1.0.0  
+**Last Updated**: November 2025

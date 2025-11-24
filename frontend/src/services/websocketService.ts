@@ -240,3 +240,51 @@ class WebSocketService {
 
 export default new WebSocketService()
 
+
+  }
+
+  // Production best practice: Heartbeat/ping to keep connection alive
+  private startHeartbeat() {
+    this.stopHeartbeat() // Clear any existing interval
+    
+    // Send ping every 30 seconds (server expects pong)
+    this.pingInterval = window.setInterval(() => {
+      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
+        try {
+          // Send ping message (server will respond with pong)
+          this.socket.send(JSON.stringify({ type: 'ping' }))
+        } catch (err) {
+          console.error('Failed to send ping:', err)
+        }
+      }
+    }, 30000) // 30 seconds
+  }
+
+  private stopHeartbeat() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval)
+      this.pingInterval = null
+    }
+  }
+
+  isConnected(): boolean {
+    return this.socket?.readyState === WebSocket.OPEN
+  }
+
+  on(event: string, callback: (data: any) => void) {
+    if (event === 'dashboard:update') {
+      window.addEventListener('dashboard:update', ((e: CustomEvent) => {
+        callback(e.detail)
+      }) as EventListener)
+    }
+  }
+
+  off(event: string, callback: (data: any) => void) {
+    if (event === 'dashboard:update') {
+      window.removeEventListener('dashboard:update', callback as EventListener)
+    }
+  }
+}
+
+export default new WebSocketService()
+
