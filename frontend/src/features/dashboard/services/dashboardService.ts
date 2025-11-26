@@ -93,39 +93,46 @@ export const dashboardService = {
   async getNetworkInfo(): Promise<NetworkInfo> {
     // Backend doesn't have /api/v1/network/info
     // Use blockchain channel info instead
-    const response = await api.get<any>(
-      API_ENDPOINTS.BLOCKS.CHANNEL_INFO
-    )
-    const data = response.data.data
-    // Ensure data is properly formatted
-    if (data && typeof data === 'object') {
-      // Extract channels (array of channel objects)
-      const channels = Array.isArray(data.channels) ? data.channels : []
-      const channelNames = channels.map((ch: any) => ch.name || ch).filter(Boolean)
-      
-      // Extract chaincodes from all channels (flatten and unique)
-      const allChaincodes: string[] = channels
-        .flatMap((ch: any) => Array.isArray(ch.chaincodes) ? ch.chaincodes : [])
-        .filter((cc: any): cc is string => cc && typeof cc === 'string')
-      const uniqueChaincodes = Array.from(new Set(allChaincodes))
-      
-      // Extract peers (array of peer objects)
-      const peers = Array.isArray(data.peers) ? data.peers : []
-      const peerCount = peers.length
-      
-      // Extract orderers (array of orderer objects)
-      const orderers = Array.isArray(data.orderers) ? data.orderers : []
-      const ordererCount = orderers.length
-      
-      return {
-        name: data.name || 'IBN Network',
-        version: data.version || '',
-        channels: channelNames,
-        chaincodes: uniqueChaincodes,
-        peers: peerCount,
-        orderers: ordererCount,
+    try {
+      const response = await api.get<any>(
+        API_ENDPOINTS.BLOCKS.CHANNEL_INFO
+      )
+      const data = response.data?.data || response.data
+      // Ensure data is properly formatted
+      if (data && typeof data === 'object') {
+        // Extract channels (array of channel objects)
+        const channels = Array.isArray(data.channels) ? data.channels : []
+        const channelNames = channels.map((ch: any) => ch.name || ch).filter(Boolean)
+        
+        // Extract chaincodes from all channels (flatten and unique)
+        const allChaincodes: string[] = channels
+          .flatMap((ch: any) => Array.isArray(ch.chaincodes) ? ch.chaincodes : [])
+          .filter((cc: any): cc is string => cc && typeof cc === 'string')
+        const uniqueChaincodes = Array.from(new Set(allChaincodes))
+        
+        // Extract peers (array of peer objects)
+        const peers = Array.isArray(data.peers) ? data.peers : []
+        const peerCount = peers.length
+        
+        // Extract orderers (array of orderer objects)
+        const orderers = Array.isArray(data.orderers) ? data.orderers : []
+        const ordererCount = orderers.length
+        
+        return {
+          name: data.name || 'IBN Network',
+          version: data.version || '',
+          channels: channelNames,
+          chaincodes: uniqueChaincodes,
+          peers: peerCount,
+          orderers: ordererCount,
+        }
       }
+    } catch (error) {
+      // If endpoint fails (e.g., 500 error), return fallback empty data
+      // This prevents ERR_BAD_RESPONSE errors in frontend
+      console.warn('Failed to fetch network info, using fallback:', error)
     }
+    // Return fallback empty data if endpoint fails or data is invalid
     return {
       name: 'IBN Network',
       version: '',

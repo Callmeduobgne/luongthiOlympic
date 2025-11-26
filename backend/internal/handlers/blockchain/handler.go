@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/ibn-network/backend/internal/services/blockchain/transaction"
 	"github.com/ibn-network/backend/internal/services/certificate"
@@ -212,7 +213,12 @@ func (h *Handler) QueryTransactions(w http.ResponseWriter, r *http.Request) {
 		req.ChannelID = &channelID
 	}
 
-	if chaincodeID := query.Get("chaincode_id"); chaincodeID != "" {
+	// Support both "chaincode" and "chaincode_id" query parameters
+	chaincodeID := query.Get("chaincode")
+	if chaincodeID == "" {
+		chaincodeID = query.Get("chaincode_id")
+	}
+	if chaincodeID != "" {
 		req.ChaincodeID = &chaincodeID
 	}
 
@@ -220,8 +226,20 @@ func (h *Handler) QueryTransactions(w http.ResponseWriter, r *http.Request) {
 		req.Status = &status
 	}
 
-	req.Limit = 100
-	req.Offset = 0
+	// Parse limit and offset from query parameters
+	req.Limit = 100 // Default limit
+	if limitStr := query.Get("limit"); limitStr != "" {
+		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 {
+			req.Limit = limit
+		}
+	}
+
+	req.Offset = 0 // Default offset
+	if offsetStr := query.Get("offset"); offsetStr != "" {
+		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
+			req.Offset = offset
+		}
+	}
 
 	transactions, err := h.txService.QueryTransactions(r.Context(), &req)
 	if err != nil {
@@ -230,10 +248,16 @@ func (h *Handler) QueryTransactions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Return response in standard format matching frontend expectation
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"transactions": transactions,
-		"count":        len(transactions),
+		"success": true,
+		"data": map[string]interface{}{
+			"transactions": transactions,
+			"total":        len(transactions),
+			"limit":        req.Limit,
+			"offset":       req.Offset,
+		},
 	})
 }
 

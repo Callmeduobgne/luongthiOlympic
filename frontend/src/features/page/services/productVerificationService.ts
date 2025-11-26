@@ -32,12 +32,11 @@ export interface VerifyProductByBlockhashResponse {
  * Verify product by blockhash/hash using backend endpoint
  * 
  * Flow xử lý khi người dùng nhập hash:
- * 1. Gọi POST /api/v1/teatrace/verify-by-hash với hash
- * 2. Backend sẽ:
- *    - Check cache (24h TTL)
- *    - Query database với index trên tx_id, chaincode_id
- *    - Query batches/packages nếu cần
- * 3. Trả về kết quả: isValid, message, transactionId, batchId, packageId
+ * 1. Gọi GET /api/v1/blockchain/verify-transaction/{txid} với transaction ID (hash)
+ * 2. Backend sẽ query TRỰC TIẾP từ blockchain network qua Gateway (KHÔNG từ database)
+ * 3. Trả về kết quả: isValid, message, transactionId
+ * 
+ * NOTE: Endpoint này query từ blockchain network, không từ database
  */
 export const verifyProductByBlockhash = async (
   blockhash: string
@@ -52,14 +51,25 @@ export const verifyProductByBlockhash = async (
       }
     }
 
-    // Call backend endpoint (with rate limiting: 10 req/min/IP)
-    const response = await api.post<{ success: boolean; data: VerifyProductByBlockhashResponse }>(
-      '/api/v1/teatrace/verify-by-hash',
-      { hash }
+    // Call backend endpoint to verify from blockchain network (not from database)
+    const response = await api.get<{ 
+      success: boolean
+      data: {
+        is_valid: boolean
+        message: string
+        tx_id: string
+        verified_from?: string
+      }
+    }>(
+      `/api/v1/blockchain/verify-transaction/${encodeURIComponent(hash)}`
     )
     
     if (response.data.success && response.data.data) {
-      return response.data.data
+      return {
+        isValid: response.data.data.is_valid,
+        message: response.data.data.message,
+        transactionId: response.data.data.tx_id,
+      }
     }
 
     // Fallback if response format is unexpected
@@ -69,6 +79,17 @@ export const verifyProductByBlockhash = async (
     }
   } catch (error: any) {
     console.error('Failed to verify product by blockhash:', error)
+    
+    // Handle 404 - transaction not found in blockchain network
+    if (error.response?.status === 404 || error.response?.status === 200) {
+      // Backend returns 200 with is_valid: false if transaction not found
+      if (error.response?.data?.data?.is_valid === false) {
+        return {
+          isValid: false,
+          message: error.response.data.data.message || 'Transaction không tồn tại trong blockchain network',
+        }
+      }
+    }
     
     // Handle rate limit error
     if (error.response?.status === 429) {

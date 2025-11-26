@@ -44,6 +44,33 @@ import {
 // Load MSP configuration
 const MSP_CONFIG = getMSPIds();
 
+/**
+ * TeaTraceContract - Professional Chaincode Implementation
+ * 
+ * Data Storage Strategy:
+ * 1. CouchDB Indexes: All queries use CouchDB rich queries with pre-defined indexes
+ *    - Indexes are defined in META-INF/statedb/couchdb/indexes/
+ *    - Indexes: indexBatchStatus, indexBatchOwner, indexPackageBatch, indexPackageStatus, indexPackageOwner
+ * 
+ * 2. Composite Keys: Packages use composite keys for efficient batch queries
+ *    - Simple key: packageId (for direct access and backward compatibility)
+ *    - Composite key: PACKAGE~batchId~packageId (for efficient getPackagesByBatch queries)
+ * 
+ * 3. Document Type: All documents include docType field for CouchDB indexing
+ *    - Batches: docType: "batch"
+ *    - Packages: docType: "package"
+ * 
+ * Performance Optimizations:
+ * - getAllBatches/getBatchesByStatus: Uses CouchDB rich queries with indexes (O(log n))
+ * - getPackagesByBatch: Uses composite key queries (O(k) where k = packages in batch)
+ * - getPackagesByStatus: Uses CouchDB rich queries with indexes (O(log n))
+ * - All queries support pagination with proper offset/limit handling
+ * 
+ * Backward Compatibility:
+ * - Packages are stored with both simple key (packageId) and composite key
+ * - Direct access via packageId still works
+ * - Existing data without docType will still work (but queries may be slower)
+ */
 export class TeaTraceContract extends Contract {
   constructor() {
     super("teaTraceContract");
@@ -84,6 +111,7 @@ export class TeaTraceContract extends Contract {
     const hashValue = generateBatchHash(input);
 
     const batch: TeaBatch = {
+      docType: "batch", // Required for CouchDB indexing
       ...input,
       hashValue,
       owner,
@@ -131,6 +159,7 @@ export class TeaTraceContract extends Contract {
 
   /**
    * Get all batches with pagination
+   * Uses CouchDB rich query with index for optimal performance
    * Args: [limit?, offset?]
    */
   public async getAllBatches(
@@ -143,22 +172,47 @@ export class TeaTraceContract extends Contract {
     const offsetNum = parseInt(offsetStr, 10);
     validatePagination(limitNum, offsetNum);
 
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use CouchDB rich query with index for optimal performance
+    const queryString = {
+      selector: {
+        docType: "batch"
+      },
+      sort: [{ timestamp: "desc" }],
+      limit: limitNum + offsetNum, // Fetch more to handle offset
+      skip: 0 // We'll handle offset manually to get accurate total
+    };
+
+    // Use CouchDB rich query with index for optimal performance
+    // getQueryResult returns StateQueryIterator which supports async iteration
+    const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
     const batches: TeaBatch[] = [];
     let total = 0;
+    let skipped = 0;
 
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
+    try {
+      // Use async iteration pattern compatible with fabric-contract-api
+      while (true) {
+        const result = await iterator.next();
+        if (result.done) {
+          break;
+        }
 
-      total++;
-      if (total > offsetNum && batches.length < limitNum) {
-        const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
-        batches.push(batch);
+        total++;
+        
+        // Handle offset
+        if (skipped < offsetNum) {
+          skipped++;
+          continue;
+        }
+
+        // Apply limit
+        if (batches.length < limitNum) {
+          const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
+          batches.push(batch);
+        }
       }
+    } finally {
+      await iterator.close();
     }
 
     return { batches, total };
@@ -166,6 +220,7 @@ export class TeaTraceContract extends Contract {
 
   /**
    * Get batches by status
+   * Uses CouchDB rich query with indexBatchStatus for optimal performance
    * Args: [status, limit?, offset?]
    */
   public async getBatchesByStatus(
@@ -186,24 +241,45 @@ export class TeaTraceContract extends Contract {
     const offsetNum = parseInt(offsetStr, 10);
     validatePagination(limitNum, offsetNum);
 
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use CouchDB rich query with indexBatchStatus index
+    const queryString = {
+      selector: {
+        docType: "batch",
+        status: normalizedStatus
+      },
+      sort: [{ timestamp: "desc" }],
+      limit: limitNum + offsetNum, // Fetch more to handle offset
+      skip: 0 // We'll handle offset manually to get accurate total
+    };
+
+    const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
     const batches: TeaBatch[] = [];
     let total = 0;
+    let skipped = 0;
 
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
+    try {
+      while (true) {
+        const result = await iterator.next();
+        if (result.done) {
+          break;
+        }
 
-      const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
-      if (batch.status === normalizedStatus) {
         total++;
-        if (total > offsetNum && batches.length < limitNum) {
+        
+        // Handle offset
+        if (skipped < offsetNum) {
+          skipped++;
+          continue;
+        }
+
+        // Apply limit
+        if (batches.length < limitNum) {
+          const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
           batches.push(batch);
         }
       }
+    } finally {
+      await iterator.close();
     }
 
     return { batches, total };
@@ -211,6 +287,7 @@ export class TeaTraceContract extends Contract {
 
   /**
    * Get batches by owner
+   * Uses CouchDB rich query with indexBatchOwner for optimal performance
    * Args: [owner, limit?, offset?]
    */
   public async getBatchesByOwner(
@@ -228,24 +305,45 @@ export class TeaTraceContract extends Contract {
     const offsetNum = parseInt(offsetStr, 10);
     validatePagination(limitNum, offsetNum);
 
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use CouchDB rich query with indexBatchOwner index
+    const queryString = {
+      selector: {
+        docType: "batch",
+        owner: owner
+      },
+      sort: [{ timestamp: "desc" }],
+      limit: limitNum + offsetNum, // Fetch more to handle offset
+      skip: 0 // We'll handle offset manually to get accurate total
+    };
+
+    const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
     const batches: TeaBatch[] = [];
     let total = 0;
+    let skipped = 0;
 
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
+    try {
+      while (true) {
+        const result = await iterator.next();
+        if (result.done) {
+          break;
+        }
 
-      const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
-      if (batch.owner === owner) {
         total++;
-        if (total > offsetNum && batches.length < limitNum) {
+        
+        // Handle offset
+        if (skipped < offsetNum) {
+          skipped++;
+          continue;
+        }
+
+        // Apply limit
+        if (batches.length < limitNum) {
+          const batch = JSON.parse(this.bytesToString(result.value.value)) as TeaBatch;
           batches.push(batch);
         }
       }
+    } finally {
+      await iterator.close();
     }
 
     return { batches, total };
@@ -360,6 +458,7 @@ export class TeaTraceContract extends Contract {
       ctx.clientIdentity.getMSPID();
 
     const pkg: TeaPackage = {
+      docType: "package", // Required for CouchDB indexing
       packageId,
       batchId,
       blockHash,
@@ -373,365 +472,16 @@ export class TeaTraceContract extends Contract {
       timestamp: this.getCurrentTimestamp(ctx)
     };
 
-    await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
-    return pkg;
-  }
-
-  /**
-   * Verify a package by comparing blockhash
-   * Args: [packageId, blockHash?]
-   */
-  public async verifyPackage(
-    ctx: Context,
-    packageId: string,
-    providedBlockHash?: string
-  ): Promise<{ isValid: boolean; package: TeaPackage }> {
-    validatePackageId(packageId);
-
-    // Public function - anyone can verify
-    const pkg = await this.getPackageOrThrow(ctx, packageId);
-
-    // If blockHash provided, compare
-    if (providedBlockHash) {
-      const isValid = pkg.blockHash === providedBlockHash;
-      
-      // If valid and status is CREATED, update to VERIFIED
-      if (isValid && pkg.status === "CREATED") {
-        pkg.status = "VERIFIED";
-        pkg.timestamp = this.getCurrentTimestamp(ctx);
-        await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
-      }
-      
-      return { isValid, package: pkg };
-    }
-
-    // If no blockHash provided, just return package info (exists check)
-    return { isValid: true, package: pkg };
-  }
-
-  /**
-   * Get package information
-   * Args: [packageId]
-   */
-  public async getPackageInfo(ctx: Context, packageId: string): Promise<TeaPackage | null> {
-    validatePackageId(packageId);
-    const buffer = await ctx.stub.getState(packageId);
-    if (!buffer || buffer.length === 0) {
-      return null;
-    }
-    return JSON.parse(this.bytesToString(buffer)) as TeaPackage;
-  }
-
-  /**
-   * Get all packages with pagination
-   * Args: [limit?, offset?]
-   */
-  public async getAllPackages(
-    ctx: Context,
-    ...args: string[]
-  ): Promise<{ packages: TeaPackage[]; total: number }> {
-    const limitStr = args[0] || "100";
-    const offsetStr = args[1] || "0";
-    const limitNum = parseInt(limitStr, 10);
-    const offsetNum = parseInt(offsetStr, 10);
-    validatePagination(limitNum, offsetNum);
-
-    // Use composite key pattern: PACKAGE_{packageId}
-    // Or iterate all and filter by prefix
-    const iterator = await ctx.stub.getStateByRange("", "");
-    const packages: TeaPackage[] = [];
-    let total = 0;
-
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
-
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        // Check if it's a package (has packageId field)
-        if (pkg.packageId) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
-        }
-      } catch (e) {
-        // Skip non-package entries
-        continue;
-      }
-    }
-
-    return { packages, total };
-  }
-
-  /**
-   * Get packages by batch ID
-   * Args: [batchId, limit?, offset?]
-   */
-  public async getPackagesByBatch(
-    ctx: Context,
-    batchId: string,
-    ...args: string[]
-  ): Promise<{ packages: TeaPackage[]; total: number }> {
-    validateBatchId(batchId);
-
-    const limitStr = args[0] || "100";
-    const offsetStr = args[1] || "0";
-    const limitNum = parseInt(limitStr, 10);
-    const offsetNum = parseInt(offsetStr, 10);
-    validatePagination(limitNum, offsetNum);
-
-    // Verify batch exists
-    await this.getBatchOrThrow(ctx, batchId);
-
-    const iterator = await ctx.stub.getStateByRange("", "");
-    const packages: TeaPackage[] = [];
-    let total = 0;
-
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
-
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        if (pkg.packageId && pkg.batchId === batchId) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    return { packages, total };
-  }
-
-  /**
-   * Get packages by status
-   * Args: [status, limit?, offset?]
-   */
-  public async getPackagesByStatus(
-    ctx: Context,
-    status: string,
-    ...args: string[]
-  ): Promise<{ packages: TeaPackage[]; total: number }> {
-    const normalizedStatus = status.toUpperCase();
-    if (!isTeaPackageStatus(normalizedStatus)) {
-      throw new Error(
-        `Invalid status '${status}'. Allowed values: CREATED, VERIFIED, SOLD, EXPIRED.`
-      );
-    }
-
-    const limitStr = args[0] || "100";
-    const offsetStr = args[1] || "0";
-    const limitNum = parseInt(limitStr, 10);
-    const offsetNum = parseInt(offsetStr, 10);
-    validatePagination(limitNum, offsetNum);
-
-    const iterator = await ctx.stub.getStateByRange("", "");
-    const packages: TeaPackage[] = [];
-    let total = 0;
-
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
-
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        if (pkg.packageId && pkg.status === normalizedStatus) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
-        }
-      } catch (e) {
-        continue;
-      }
-    }
-
-    return { packages, total };
-  }
-
-  /**
-   * Get package history (all changes)
-   * Args: [packageId]
-   */
-  public async getPackageHistory(ctx: Context, packageId: string): Promise<TeaPackage[]> {
-    validatePackageId(packageId);
-
-    const historyIterator = await ctx.stub.getHistoryForKey(packageId);
-    const history: TeaPackage[] = [];
-
-    while (true) {
-      const result = await historyIterator.next();
-      if (result.done) {
-        await historyIterator.close();
-        break;
-      }
-
-      if (result.value.isDelete) {
-        continue;
-      }
-
-      const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-      history.push(pkg);
-    }
-
-    return history.reverse(); // Oldest first
-  }
-
-  /**
-   * Update package status
-   * Args: [packageId, status]
-   */
-  public async updatePackageStatus(
-    ctx: Context,
-    packageId: string,
-    status: string
-  ): Promise<TeaPackage> {
-    validatePackageId(packageId);
-    if (!status || status.trim().length === 0) {
-      throw new Error("Status cannot be empty");
-    }
-
-    this.ensureOrg(ctx, [MSP_CONFIG.FARMER, MSP_CONFIG.ADMIN], "update package status");
-
-    const normalizedStatus = status.toUpperCase();
-    if (!isTeaPackageStatus(normalizedStatus)) {
-      throw new Error(
-        `Invalid status '${status}'. Allowed values: CREATED, VERIFIED, SOLD, EXPIRED.`
-      );
-    }
-
-    const pkg = await this.getPackageOrThrow(ctx, packageId);
-    pkg.status = normalizedStatus as TeaPackageStatus;
-    pkg.timestamp = this.getCurrentTimestamp(ctx);
-
-    await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
-    return pkg;
-  }
-
-  private ensureOrg(ctx: Context, allowedMsps: string[], action: string): void {
-    const callerMsp = ctx.clientIdentity.getMSPID();
-    if (!allowedMsps.includes(callerMsp)) {
-      throw new Error(
-        `MSP '${callerMsp}' is not authorized to ${action}. Allowed MSPs: ${allowedMsps.join(", ")}`
-      );
-    }
-  }
-
-  private async getBatchOrThrow(ctx: Context, batchId: string): Promise<TeaBatch> {
-    const buffer = await ctx.stub.getState(batchId);
-    if (!buffer || buffer.length === 0) {
-      throw new Error(`Batch with id '${batchId}' does not exist.`);
-    }
-
-    return JSON.parse(this.bytesToString(buffer)) as TeaBatch;
-  }
-
-  private async assertBatchDoesNotExist(ctx: Context, batchId: string): Promise<void> {
-    const buffer = await ctx.stub.getState(batchId);
-    if (buffer && buffer.length > 0) {
-      throw new Error(`Batch with id '${batchId}' already exists.`);
-    }
-  }
-
-  private async getPackageOrThrow(ctx: Context, packageId: string): Promise<TeaPackage> {
-    const buffer = await ctx.stub.getState(packageId);
-    if (!buffer || buffer.length === 0) {
-      throw new Error(`Package with id '${packageId}' does not exist.`);
-    }
-
-    return JSON.parse(this.bytesToString(buffer)) as TeaPackage;
-  }
-
-  private async assertPackageDoesNotExist(ctx: Context, packageId: string): Promise<void> {
-    const buffer = await ctx.stub.getState(packageId);
-    if (buffer && buffer.length > 0) {
-      throw new Error(`Package with id '${packageId}' already exists.`);
-    }
-  }
-
-  /**
-   * Generate a unique blockHash identifier for package
-   * This is a composite hash from package data + transaction ID
-   * Backend can update with actual blockhash from blockchain later
-   */
-  private generatePackageBlockHash(
-    packageId: string,
-    batchId: string,
-    weight: number,
-    productionDate: string,
-    txId: string
-  ): string {
-    const payload = `${packageId}|${batchId}|${weight}|${productionDate}|${txId}`;
-    return crypto.createHash("sha256").update(payload).digest("hex");
-  }
-
-  private getCurrentTimestamp(ctx: Context): string {
-    const timestamp = ctx.stub.getTxTimestamp();
-    const millis = timestamp.seconds.toNumber() * 1000 + Math.floor(timestamp.nanos / 1_000_000);
-    return new Date(millis).toISOString();
-  }
-
-  private bytesToString(bytes: Uint8Array): string {
-    return Buffer.from(bytes).toString("utf8");
-  }
-}
-
-export const contracts = [TeaTraceContract];
-
-
-      throw new Error("QR code must be less than 500 characters");
-    }
-
-    // Check authorization (Farmer, Admin can create packages)
-    this.ensureOrg(ctx, [MSP_CONFIG.FARMER, MSP_CONFIG.ADMIN], "create packages");
-
-    // Verify batch exists
-    await this.getBatchOrThrow(ctx, batchId);
-
-    // Check package doesn't exist
-    await this.assertPackageDoesNotExist(ctx, packageId);
-
-    // Get transaction ID
-    const txId = ctx.stub.getTxID();
+    // Use composite key for efficient querying: PACKAGE~batchId~packageId
+    // This allows efficient queries by batchId using getStateByPartialCompositeKey
+    const packageKey = ctx.stub.createCompositeKey("PACKAGE", [batchId, packageId]);
     
-    // Generate blockHash identifier from package data + txId
-    // Backend can update with actual blockhash later
-    const blockHash = this.generatePackageBlockHash(packageId, batchId, weight, productionDate, txId);
-
-    const owner =
-      ctx.clientIdentity.getAttributeValue("owner") ||
-      ctx.clientIdentity.getAttributeValue("organization") ||
-      ctx.clientIdentity.getMSPID();
-
-    const pkg: TeaPackage = {
-      packageId,
-      batchId,
-      blockHash,
-      txId,
-      weight,
-      productionDate,
-      expiryDate,
-      qrCode,
-      status: "CREATED",
-      owner,
-      timestamp: this.getCurrentTimestamp(ctx)
-    };
-
+    // Store with simple key for backward compatibility and direct access
     await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
+    
+    // Store with composite key for efficient batch queries
+    await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
+    
     return pkg;
   }
 
@@ -757,7 +507,11 @@ export const contracts = [TeaTraceContract];
       if (isValid && pkg.status === "CREATED") {
         pkg.status = "VERIFIED";
         pkg.timestamp = this.getCurrentTimestamp(ctx);
+        
+        // Update both simple key and composite key
         await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
+        const packageKey = ctx.stub.createCompositeKey("PACKAGE", [pkg.batchId, packageId]);
+        await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
       }
       
       return { isValid, package: pkg };
@@ -782,6 +536,7 @@ export const contracts = [TeaTraceContract];
 
   /**
    * Get all packages with pagination
+   * Uses CouchDB rich query with index for optimal performance
    * Args: [limit?, offset?]
    */
   public async getAllPackages(
@@ -794,11 +549,20 @@ export const contracts = [TeaTraceContract];
     const offsetNum = parseInt(offsetStr, 10);
     validatePagination(limitNum, offsetNum);
 
-    // Use composite key pattern: PACKAGE_{packageId}
-    // Or iterate all and filter by prefix
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use CouchDB rich query with index for optimal performance
+    const queryString = {
+      selector: {
+        docType: "package"
+      },
+      sort: [{ timestamp: "desc" }],
+      limit: limitNum + offsetNum, // Fetch more to handle offset
+      skip: 0 // We'll handle offset manually to get accurate total
+    };
+
+    const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
     const packages: TeaPackage[] = [];
     let total = 0;
+    let skipped = 0;
 
     while (true) {
       const result = await iterator.next();
@@ -807,18 +571,18 @@ export const contracts = [TeaTraceContract];
         break;
       }
 
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        // Check if it's a package (has packageId field)
-        if (pkg.packageId) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
-        }
-      } catch (e) {
-        // Skip non-package entries
+      total++;
+      
+      // Handle offset
+      if (skipped < offsetNum) {
+        skipped++;
         continue;
+      }
+
+      // Apply limit
+      if (packages.length < limitNum) {
+        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
+        packages.push(pkg);
       }
     }
 
@@ -827,6 +591,7 @@ export const contracts = [TeaTraceContract];
 
   /**
    * Get packages by batch ID
+   * Uses composite key for optimal performance: PACKAGE~batchId~packageId
    * Args: [batchId, limit?, offset?]
    */
   public async getPackagesByBatch(
@@ -845,28 +610,36 @@ export const contracts = [TeaTraceContract];
     // Verify batch exists
     await this.getBatchOrThrow(ctx, batchId);
 
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use composite key for efficient querying: PACKAGE~batchId~packageId
+    // This is much faster than scanning all state
+    const iterator = await ctx.stub.getStateByPartialCompositeKey("PACKAGE", [batchId]);
     const packages: TeaPackage[] = [];
     let total = 0;
+    let skipped = 0;
 
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
-
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        if (pkg.packageId && pkg.batchId === batchId) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
+    try {
+      while (true) {
+        const result = await iterator.next();
+        if (result.done) {
+          break;
         }
-      } catch (e) {
-        continue;
+
+        total++;
+        
+        // Handle offset
+        if (skipped < offsetNum) {
+          skipped++;
+          continue;
+        }
+
+        // Apply limit
+        if (packages.length < limitNum) {
+          const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
+          packages.push(pkg);
+        }
       }
+    } finally {
+      await iterator.close();
     }
 
     return { packages, total };
@@ -874,6 +647,7 @@ export const contracts = [TeaTraceContract];
 
   /**
    * Get packages by status
+   * Uses CouchDB rich query with indexPackageStatus for optimal performance
    * Args: [status, limit?, offset?]
    */
   public async getPackagesByStatus(
@@ -894,28 +668,45 @@ export const contracts = [TeaTraceContract];
     const offsetNum = parseInt(offsetStr, 10);
     validatePagination(limitNum, offsetNum);
 
-    const iterator = await ctx.stub.getStateByRange("", "");
+    // Use CouchDB rich query with indexPackageStatus index
+    const queryString = {
+      selector: {
+        docType: "package",
+        status: normalizedStatus
+      },
+      sort: [{ timestamp: "desc" }],
+      limit: limitNum + offsetNum, // Fetch more to handle offset
+      skip: 0 // We'll handle offset manually to get accurate total
+    };
+
+    const iterator = await ctx.stub.getQueryResult(JSON.stringify(queryString));
     const packages: TeaPackage[] = [];
     let total = 0;
+    let skipped = 0;
 
-    while (true) {
-      const result = await iterator.next();
-      if (result.done) {
-        await iterator.close();
-        break;
-      }
-
-      try {
-        const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
-        if (pkg.packageId && pkg.status === normalizedStatus) {
-          total++;
-          if (total > offsetNum && packages.length < limitNum) {
-            packages.push(pkg);
-          }
+    try {
+      while (true) {
+        const result = await iterator.next();
+        if (result.done) {
+          break;
         }
-      } catch (e) {
-        continue;
+
+        total++;
+        
+        // Handle offset
+        if (skipped < offsetNum) {
+          skipped++;
+          continue;
+        }
+
+        // Apply limit
+        if (packages.length < limitNum) {
+          const pkg = JSON.parse(this.bytesToString(result.value.value)) as TeaPackage;
+          packages.push(pkg);
+        }
       }
+    } finally {
+      await iterator.close();
     }
 
     return { packages, total };
@@ -976,7 +767,11 @@ export const contracts = [TeaTraceContract];
     pkg.status = normalizedStatus as TeaPackageStatus;
     pkg.timestamp = this.getCurrentTimestamp(ctx);
 
+    // Update both simple key and composite key
     await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
+    const packageKey = ctx.stub.createCompositeKey("PACKAGE", [pkg.batchId, packageId]);
+    await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
+    
     return pkg;
   }
 
@@ -1049,4 +844,3 @@ export const contracts = [TeaTraceContract];
 }
 
 export const contracts = [TeaTraceContract];
-

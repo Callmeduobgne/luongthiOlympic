@@ -276,8 +276,8 @@ export const BatchDetailPage = () => {
               Update
             </Button>
           </div>
-          </div>
-        </Modal>
+        </div>
+      </Modal>
 
       {/* QR Code Modal */}
       <Modal
@@ -310,39 +310,4 @@ export const BatchDetailPage = () => {
 }
 
 
-              Update
-            </Button>
-          </div>
-          </div>
-        </Modal>
-
-      {/* QR Code Modal */}
-      <Modal
-        isOpen={showQRModal}
-        onClose={() => setShowQRModal(false)}
-        title="QR Code - Batch Verification"
-      >
-        <div className="space-y-4 text-white">
-          <p className="text-sm text-gray-300 text-center">
-            Scan this QR code to verify the batch authenticity on the blockchain
-          </p>
-          {batchId && (
-            <div className="flex justify-center">
-              <QRCodeDisplay batchId={batchId} size={256} showDownload />
-            </div>
-          )}
-          <div className="pt-4 border-t border-white/10">
-            <Button
-              variant="secondary"
-              onClick={() => setShowQRModal(false)}
-              className="w-full"
-            >
-              Close
-            </Button>
-          </div>
-        </div>
-      </Modal>
-    </div>
-  )
-}
 

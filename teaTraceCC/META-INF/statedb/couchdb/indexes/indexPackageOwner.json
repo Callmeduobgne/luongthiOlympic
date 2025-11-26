@@ -1,0 +1,20 @@
+{
+  "index": {
+    "fields": [
+      {
+        "docType": "asc"
+      },
+      {
+        "owner": "asc"
+      },
+      {
+        "timestamp": "desc"
+      }
+    ]
+  },
+  "ddoc": "indexPackageOwner",
+  "name": "indexPackageOwner",
+  "type": "json"
+}
+
+

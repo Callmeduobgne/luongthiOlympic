@@ -1,8 +1,8 @@
 # API Gateway Layer - Kiến Trúc & Hướng Dẫn
 
 **Ngày tạo:** 2025-11-12  
-**Version:** 1.0.0  
-**Last Updated:** 2025-01-27  
+**Version:** 1.1.0  
+**Last Updated:** 2025-11-24  
 **Layer:** API Gateway (REST API cho Blockchain)
 
 ---

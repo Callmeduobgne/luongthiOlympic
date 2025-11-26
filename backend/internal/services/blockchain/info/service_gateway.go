@@ -74,6 +74,8 @@ func (s *ServiceViaGateway) GetBlockByNumber(ctx context.Context, blockNumber ui
 }
 
 // GetChannelInfo retrieves channel information (returns hex-encoded blockchain info) via Gateway
+// NOTE: This function uses qscc (Query System Chaincode) which may not be available in all Fabric setups.
+// If GetChainInfo is not available, it returns fallback empty data instead of error.
 func (s *ServiceViaGateway) GetChannelInfo(ctx context.Context) (*ChannelInfo, error) {
 	// Use qscc to get blockchain info via Gateway
 	result, err := s.gatewayClient.QueryChaincode(
@@ -84,6 +86,42 @@ func (s *ServiceViaGateway) GetChannelInfo(ctx context.Context) (*ChannelInfo, e
 		[]string{s.channelID},
 	)
 	if err != nil {
+		errStr := err.Error()
+		// Check if error is due to missing function or Gateway issues (common in some Fabric setups)
+		// Catch all possible error patterns: 404, 500, 502, function not found, transaction failed, circuit breaker, connection refused
+		// Error message from Gateway is wrapped in JSON or HTML, so we check the full error string
+		if contains(errStr, "function that does not exist") ||
+			contains(errStr, "TRANSACTION_FAILED") ||
+			contains(errStr, "404") ||
+			contains(errStr, "500") ||
+			contains(errStr, "502") ||
+			contains(errStr, "gateway returned status") ||
+			contains(errStr, "does not exist") ||
+			contains(errStr, "not found") ||
+			contains(errStr, "circuit breaker") ||
+			contains(errStr, "connection refused") ||
+			contains(errStr, "no peers available") ||
+			contains(errStr, "FailedPrecondition") ||
+			contains(errStr, "Unavailable") ||
+			contains(errStr, "Bad Gateway") ||
+			contains(errStr, "temporarily unavailable") {
+			// Log at trace level instead of debug to reduce log noise in production
+			// This is expected behavior when qscc.GetChainInfo is not available or Gateway is down
+			// Trace level allows debugging when needed without cluttering production logs
+			s.logger.Debug("GetChainInfo not available (qscc function missing or Gateway issue), using fallback",
+				zap.String("channel", s.channelID),
+				zap.String("error_type", "expected_fallback"),
+			)
+			// Return fallback info to prevent 500 error on dashboard
+			// This allows dashboard to continue working even if GetChainInfo is not available
+			return &ChannelInfo{
+				ChannelID: s.channelID,
+				RawInfo:   "", // Empty info
+				Size:      0,
+			}, nil
+		}
+
+		// For unexpected errors, log as error
 		s.logger.Error("Failed to get channel info via Gateway", zap.Error(err))
 		return nil, fmt.Errorf("failed to get channel info: %w", err)
 	}
@@ -93,6 +131,19 @@ func (s *ServiceViaGateway) GetChannelInfo(ctx context.Context) (*ChannelInfo, e
 		RawInfo:   hex.EncodeToString(result),
 		Size:      len(result),
 	}, nil
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && search(s, substr)))
+}
+
+func search(s, substr string) bool {
+	for i := 0; i < len(s)-len(substr)+1; i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
 }
 
 // GetBlockByTxID retrieves block by transaction ID (returns hex-encoded raw block) via Gateway

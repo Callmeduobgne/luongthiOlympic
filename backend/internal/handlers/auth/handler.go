@@ -200,16 +200,36 @@ func (h *Handler) GetProfile(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.service.GetUserByID(r.Context(), userID)
 	if err != nil {
-		h.logger.Error("Failed to get user profile", zap.Error(err))
+		h.logger.Error("Failed to get user profile", 
+			zap.Error(err),
+			zap.String("user_id", userID.String()),
+		)
 		h.respondError(w, http.StatusNotFound, "User not found")
 		return
 	}
 
-	// Wrap response in success format
-	h.respondJSON(w, http.StatusOK, map[string]interface{}{
-		"success": true,
-		"data":    user,
-	})
+	// Validate user object is not nil (defensive programming)
+	if user == nil {
+		h.logger.Error("GetUserByID returned nil user without error",
+			zap.String("user_id", userID.String()),
+		)
+		h.respondError(w, http.StatusInternalServerError, "User data is invalid")
+		return
+	}
+
+	// Use explicit response type instead of map[string]interface{}
+	// This prevents JSON serialization issues and double-encoding
+	type ProfileResponse struct {
+		Success bool       `json:"success"`
+		Data    *auth.User `json:"data"`
+	}
+
+	response := ProfileResponse{
+		Success: true,
+		Data:    user,
+	}
+
+	h.respondJSON(w, http.StatusOK, response)
 }
 
 // UploadAvatar handles avatar upload

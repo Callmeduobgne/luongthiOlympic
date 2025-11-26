@@ -253,9 +253,9 @@ export const Header = ({}: HeaderProps) => {
         <div className="flex h-16 items-center justify-between px-4 lg:px-6 text-white">
           {/* Left: Logo */}
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate('/page')}
             className="flex items-center gap-2 hover:opacity-80 transition-opacity cursor-pointer"
-            aria-label="Go to Home Page"
+            aria-label="Go to Platform Page"
           >
             <div className="h-9 w-9 rounded-2xl border border-white/30 bg-white/10 flex items-center justify-center backdrop-blur">
               <span className="text-white font-bold text-sm tracking-wide">IBN</span>

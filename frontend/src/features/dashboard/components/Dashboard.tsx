@@ -74,13 +74,13 @@ export const Dashboard = () => {
   // Use WebSocket data if available and connected, otherwise fallback to polling
   const metrics = (useWebSocket && wsConnected && wsData?.metrics) ? wsData.metrics : metricsPolling
   const blocks = (useWebSocket && wsConnected && wsData?.blocks) ? wsData.blocks : blocksPolling
-  
+
   // Loading state: true if WebSocket connected but no data yet, OR if polling is loading
   // Only show loading if we're actually waiting for data (not if we have data from either source)
-  const isLoading = 
-    (useWebSocket && wsConnected && !wsError && !wsData?.metrics && !wsData?.blocks && !metricsPolling && !blocksPolling) 
-    ? true 
-    : (metricsLoading || blocksLoading)
+  const isLoading =
+    (useWebSocket && wsConnected && !wsError && !wsData?.metrics && !wsData?.blocks && !metricsPolling && !blocksPolling)
+      ? true
+      : (metricsLoading || blocksLoading)
 
   // Handle WebSocket connection status
   useEffect(() => {
@@ -356,14 +356,14 @@ export const Dashboard = () => {
                 // ============================================
                 // ĐIỀU CHỈNH THÔNG SỐ LIQUID GLASS Ở ĐÂY
                 // ============================================
-                
+
                 // 1. ĐỘ TRONG SUỐT (Background Opacity)
                 //    - 0.01-0.03: Rất trong suốt (khuyến nghị)
                 //    - 0.03-0.05: Trong suốt vừa phải
                 //    - 0.05-0.08: Ít trong suốt hơn
                 //    - 0.08-0.12: Gần đục
                 background: 'rgba(255, 255, 255, 0.01)', // Thay đổi số 0.03
-                
+
                 // 2. ĐỘ MỜ (Blur)
                 //    - 10-15px: Mờ nhẹ
                 //    - 15-20px: Mờ vừa (khuyến nghị)
@@ -371,21 +371,21 @@ export const Dashboard = () => {
                 //    - 25-30px: Rất mờ
                 backdropFilter: 'blur(20px) saturate(180%)', // Thay đổi số 20
                 WebkitBackdropFilter: 'blur(20px) saturate(180%)', // Thay đổi số 20
-                
+
                 // 3. ĐỘ BÃO HÒA MÀU (Saturate)
                 //    - 100%: Không tăng màu
                 //    - 150-180%: Tăng màu vừa (khuyến nghị)
                 //    - 180-200%: Tăng màu mạnh
                 //    - 200%+: Rất bão hòa
                 //    (Số 180 trong saturate(180%) - thay đổi ở đây)
-                
+
                 // 4. ĐỘ DÀY VIỀN (Border Opacity)
                 //    - 0.10-0.15: Viền mỏng, mờ
                 //    - 0.15-0.20: Viền vừa (khuyến nghị)
                 //    - 0.20-0.30: Viền rõ hơn
                 //    - 0.30-0.40: Viền đậm
                 border: '1px solid rgba(255, 255, 255, 0.08)', // Thay đổi số 0.18
-                
+
                 // 5. BÓNG ĐỔ (Box Shadow)
                 //    - Shadow ngoài: 0 8px 32px rgba(0,0,0,0.37)
                 //      * 8px: Độ mờ blur (tăng = mờ hơn)
@@ -415,7 +415,7 @@ export const Dashboard = () => {
                 <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
                 {/* Thay đổi white/10 thành white/5 (nhẹ hơn) hoặc white/15 (sáng hơn) */}
               </div>
-              
+
               {/* ============================================
                   GRADIENT OVERLAY - ĐIỀU CHỈNH Ở ĐÂY
                   ============================================ */}
@@ -427,7 +427,7 @@ export const Dashboard = () => {
               */}
               <div className={`absolute inset-0 bg-gradient-to-br ${card.gradient} opacity-0 group-hover:opacity-30 transition-opacity duration-700`} />
               {/* Thay đổi opacity-30 thành opacity-20 (nhẹ hơn) hoặc opacity-40 (đậm hơn) */}
-              
+
               {/* ============================================
                   GLASS REFLECTION - ĐIỀU CHỈNH Ở ĐÂY
                   ============================================ */}
@@ -440,7 +440,7 @@ export const Dashboard = () => {
               */}
               <div className="absolute top-0 left-0 right-0 h-1/2 bg-gradient-to-b from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-700 rounded-t-3xl" />
               {/* Thay đổi from-white/5 thành from-white/3 (sáng hơn) hoặc from-white/8 (mờ hơn) */}
-              
+
               <div className="relative z-10">
                 <div className="flex items-center justify-between text-sm text-gray-200/90">
                   <span className="font-medium tracking-wide">{card.title}</span>
@@ -455,7 +455,7 @@ export const Dashboard = () => {
                     - group-hover:scale-110 - Độ phóng to khi hover (1.05-1.15)
                     - duration-500: Tốc độ animation (300-700ms)
                   */}
-                  <span 
+                  <span
                     className="p-2.5 rounded-full transition-all duration-500 group-hover:scale-110"
                     style={{
                       background: 'rgba(255, 255, 255, 0.08)', // Thay đổi số 0.08
@@ -563,7 +563,7 @@ export const Dashboard = () => {
                       <div className="relative rounded-2xl border border-white/10 bg-black/30 px-4 py-3 hover:border-white/30 transition">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white font-semibold">
+                            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-white font-semibold">
                               #{block.number}
                             </div>
                             <div>
@@ -664,9 +664,3 @@ export const Dashboard = () => {
     </div>
   )
 }
-
-
-    </div>
-  )
-}
-

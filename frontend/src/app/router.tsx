@@ -22,21 +22,31 @@ import { ExplorerPage } from '@features/explorer/pages/ExplorerPage'
 import { AnalyticsPage } from '@features/analytics/pages/AnalyticsPage'
 import { NetworkPage } from '@features/network/pages/NetworkPage'
 import { SettingsPage } from '@features/settings/pages/SettingsPage'
-import { Page } from '@features/page/pages/Page'
+import { TeaShopHomepage } from '@/pages/TeaShopHomepage'
+import VerifyPackage from '@/pages/VerifyPackage'
+import VerifyHashPage from '@/pages/VerifyHashPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
   {
     path: '/',
-    element: <Page />,
-  },
-  {
-    path: '/page',
-    element: <Page />,
+    element: <TeaShopHomepage />,
   },
   {
     path: '/login',
     element: <AuthPage />,
+  },
+  {
+    path: '/verify/packages/:packageId',
+    element: <VerifyPackage />,
+  },
+  {
+    path: '/verify/batches/:batchId',
+    element: <VerifyPackage />,
+  },
+  {
+    path: '/verify/hash',
+    element: <VerifyHashPage />,
   },
   {
     path: '/dashboard',

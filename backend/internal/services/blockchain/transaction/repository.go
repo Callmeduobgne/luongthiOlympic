@@ -16,7 +16,10 @@ package transaction
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,13 +39,19 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 func (r *Repository) CreateTransaction(ctx context.Context, tx *Transaction) error {
 	query := `
 		INSERT INTO blockchain.transactions 
-		(id, tx_id, user_id, channel_id, chaincode_id, function_name, args, payload, status, submitted_at)
+		(id, tx_id, user_id, channel_name, chaincode_name, function_name, args, transient_data, status, submitted_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
+	// Convert Payload to transient_data (JSONB)
+	var transientData interface{}
+	if tx.Payload != nil {
+		transientData = tx.Payload
+	}
+
 	_, err := r.db.Exec(ctx, query,
 		tx.ID, tx.TxID, tx.UserID, tx.ChannelID, tx.ChaincodeID,
-		tx.FunctionName, tx.Args, tx.Payload, tx.Status, tx.SubmittedAt,
+		tx.FunctionName, tx.Args, transientData, tx.Status, tx.SubmittedAt,
 	)
 
 	if err != nil {
@@ -53,16 +62,17 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *Transaction) err
 }
 
 // UpdateTransactionStatus updates the transaction status
+// Note: Database schema only has: status, block_number, error_message, committed_at
 func (r *Repository) UpdateTransactionStatus(ctx context.Context, id uuid.UUID, status string, blockNumber *uint64, txIndex *uint32, responseData string, errorMsg *string, validationCode *int32) error {
 	query := `
 		UPDATE blockchain.transactions 
-		SET status = $2, block_number = $3, tx_index = $4, 
-		    response_data = $5, error_message = $6, validation_code = $7,
-		    completed_at = NOW(), updated_at = NOW()
+		SET status = $2, block_number = $3, error_message = $4,
+		    committed_at = CASE WHEN $2 IN ('committed', 'failed', 'timeout') THEN NOW() ELSE committed_at END,
+		    updated_at = NOW()
 		WHERE id = $1
 	`
 
-	_, err := r.db.Exec(ctx, query, id, status, blockNumber, txIndex, responseData, errorMsg, validationCode)
+	_, err := r.db.Exec(ctx, query, id, status, blockNumber, errorMsg)
 	if err != nil {
 		return fmt.Errorf("failed to update transaction status: %w", err)
 	}
@@ -74,19 +84,60 @@ func (r *Repository) UpdateTransactionStatus(ctx context.Context, id uuid.UUID, 
 func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*Transaction, error) {
 	tx := &Transaction{}
 	query := `
-		SELECT id, tx_id, user_id, channel_id, chaincode_id, function_name, 
-		       args, payload, status, block_number, tx_index, response_data, 
-		       error_message, submitted_at, completed_at, validation_code
+		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
+		       args, transient_data, status, block_number, 
+		       error_message, submitted_at, committed_at
 		FROM blockchain.transactions 
 		WHERE id = $1
 	`
 
+	var committedAt, submittedAt sql.NullTime
+	var argsJSON, payloadJSON sql.NullString
+	var blockNumber sql.NullInt64
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
-		&tx.FunctionName, &tx.Args, &tx.Payload, &tx.Status,
-		&tx.BlockNumber, &tx.TxIndex, &tx.ResponseData, &tx.ErrorMessage,
-		&tx.SubmittedAt, &tx.CompletedAt, &tx.ValidationCode,
+		&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
+		&blockNumber, &tx.ErrorMessage,
+		&submittedAt, &committedAt,
 	)
+	
+	// Handle NULL block_number
+	if blockNumber.Valid {
+		blockNum := uint64(blockNumber.Int64)
+		tx.BlockNumber = &blockNum
+	}
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction: %w", err)
+	}
+	
+	// Handle NULL submitted_at - use zero time if NULL
+	if submittedAt.Valid {
+		tx.SubmittedAt = submittedAt.Time
+	} else {
+		tx.SubmittedAt = time.Time{}
+	}
+	
+	// Parse args JSONB
+	if argsJSON.Valid && argsJSON.String != "" {
+		var args []string
+		if err := json.Unmarshal([]byte(argsJSON.String), &args); err == nil {
+			tx.Args = args
+		}
+	}
+	
+	// Parse payload/transient_data JSONB
+	if payloadJSON.Valid && payloadJSON.String != "" {
+		var payload map[string]interface{}
+		if err := json.Unmarshal([]byte(payloadJSON.String), &payload); err == nil {
+			tx.Payload = payload
+		}
+	}
+	
+	// Handle NULL committed_at
+	if committedAt.Valid {
+		tx.CompletedAt = &committedAt.Time
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction: %w", err)
@@ -99,19 +150,60 @@ func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*Tra
 func (r *Repository) GetTransactionByTxID(ctx context.Context, txID string) (*Transaction, error) {
 	tx := &Transaction{}
 	query := `
-		SELECT id, tx_id, user_id, channel_id, chaincode_id, function_name, 
-		       args, payload, status, block_number, tx_index, response_data, 
-		       error_message, submitted_at, completed_at, validation_code
+		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
+		       args, transient_data, status, block_number, 
+		       error_message, submitted_at, committed_at
 		FROM blockchain.transactions 
 		WHERE tx_id = $1
 	`
 
+	var committedAt, submittedAt sql.NullTime
+	var argsJSON, payloadJSON sql.NullString
+	var blockNumber sql.NullInt64
 	err := r.db.QueryRow(ctx, query, txID).Scan(
 		&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
-		&tx.FunctionName, &tx.Args, &tx.Payload, &tx.Status,
-		&tx.BlockNumber, &tx.TxIndex, &tx.ResponseData, &tx.ErrorMessage,
-		&tx.SubmittedAt, &tx.CompletedAt, &tx.ValidationCode,
+		&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
+		&blockNumber, &tx.ErrorMessage,
+		&submittedAt, &committedAt,
 	)
+	
+	// Handle NULL block_number
+	if blockNumber.Valid {
+		blockNum := uint64(blockNumber.Int64)
+		tx.BlockNumber = &blockNum
+	}
+	
+	if err != nil {
+		return nil, fmt.Errorf("failed to get transaction by tx_id: %w", err)
+	}
+	
+	// Handle NULL submitted_at - use zero time if NULL
+	if submittedAt.Valid {
+		tx.SubmittedAt = submittedAt.Time
+	} else {
+		tx.SubmittedAt = time.Time{}
+	}
+	
+	// Parse args JSONB
+	if argsJSON.Valid && argsJSON.String != "" {
+		var args []string
+		if err := json.Unmarshal([]byte(argsJSON.String), &args); err == nil {
+			tx.Args = args
+		}
+	}
+	
+	// Parse payload/transient_data JSONB
+	if payloadJSON.Valid && payloadJSON.String != "" {
+		var payload map[string]interface{}
+		if err := json.Unmarshal([]byte(payloadJSON.String), &payload); err == nil {
+			tx.Payload = payload
+		}
+	}
+	
+	// Handle NULL committed_at
+	if committedAt.Valid {
+		tx.CompletedAt = &committedAt.Time
+	}
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to get transaction by tx_id: %w", err)
@@ -123,9 +215,9 @@ func (r *Repository) GetTransactionByTxID(ctx context.Context, txID string) (*Tr
 // QueryTransactions queries transactions with filters
 func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactionsRequest) ([]*Transaction, error) {
 	query := `
-		SELECT id, tx_id, user_id, channel_id, chaincode_id, function_name, 
-		       args, payload, status, block_number, tx_index, response_data, 
-		       error_message, submitted_at, completed_at, validation_code
+		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
+		       args, transient_data, status, block_number, 
+		       error_message, submitted_at, committed_at
 		FROM blockchain.transactions
 		WHERE 1=1
 	`
@@ -140,13 +232,13 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 	}
 
 	if req.ChannelID != nil {
-		query += fmt.Sprintf(" AND channel_id = $%d", argPos)
+		query += fmt.Sprintf(" AND channel_name = $%d", argPos)
 		args = append(args, *req.ChannelID)
 		argPos++
 	}
 
 	if req.ChaincodeID != nil {
-		query += fmt.Sprintf(" AND chaincode_id = $%d", argPos)
+		query += fmt.Sprintf(" AND chaincode_name = $%d", argPos)
 		args = append(args, *req.ChaincodeID)
 		argPos++
 	}
@@ -169,7 +261,7 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 		argPos++
 	}
 
-	query += " ORDER BY submitted_at DESC"
+	query += " ORDER BY COALESCE(submitted_at, created_at) DESC"
 
 	if req.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argPos)
@@ -191,14 +283,53 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 	var transactions []*Transaction
 	for rows.Next() {
 		tx := &Transaction{}
+		var committedAt, submittedAt sql.NullTime
+		var argsJSON, payloadJSON sql.NullString
+		var blockNumber sql.NullInt64
+		
 		err := rows.Scan(
 			&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
-			&tx.FunctionName, &tx.Args, &tx.Payload, &tx.Status,
-			&tx.BlockNumber, &tx.TxIndex, &tx.ResponseData, &tx.ErrorMessage,
-			&tx.SubmittedAt, &tx.CompletedAt, &tx.ValidationCode,
+			&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
+			&blockNumber, &tx.ErrorMessage,
+			&submittedAt, &committedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
+		}
+		
+		// Handle NULL block_number
+		if blockNumber.Valid {
+			blockNum := uint64(blockNumber.Int64)
+			tx.BlockNumber = &blockNum
+		}
+		
+		// Handle NULL submitted_at - use zero time if NULL
+		if submittedAt.Valid {
+			tx.SubmittedAt = submittedAt.Time
+		} else {
+			// If NULL, use zero time (will be serialized as "0001-01-01T00:00:00Z" in JSON)
+			tx.SubmittedAt = time.Time{}
+		}
+		
+		// Parse args JSONB
+		if argsJSON.Valid && argsJSON.String != "" {
+			var args []string
+			if err := json.Unmarshal([]byte(argsJSON.String), &args); err == nil {
+				tx.Args = args
+			}
+		}
+		
+		// Parse payload/transient_data JSONB
+		if payloadJSON.Valid && payloadJSON.String != "" {
+			var payload map[string]interface{}
+			if err := json.Unmarshal([]byte(payloadJSON.String), &payload); err == nil {
+				tx.Payload = payload
+			}
+		}
+		
+		// Handle NULL committed_at
+		if committedAt.Valid {
+			tx.CompletedAt = &committedAt.Time
 		}
 		transactions = append(transactions, tx)
 	}
@@ -207,10 +338,11 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 }
 
 // AddStatusHistory adds a status history entry
+// Note: Database schema uses: previous_status, new_status, error_message, metadata, created_at
 func (r *Repository) AddStatusHistory(ctx context.Context, history *TransactionStatusHistory) error {
 	query := `
 		INSERT INTO blockchain.transaction_status_history 
-		(id, transaction_id, status, details, timestamp)
+		(id, transaction_id, new_status, error_message, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`
 
@@ -228,10 +360,10 @@ func (r *Repository) AddStatusHistory(ctx context.Context, history *TransactionS
 // GetStatusHistory retrieves status history for a transaction
 func (r *Repository) GetStatusHistory(ctx context.Context, transactionID uuid.UUID) ([]*TransactionStatusHistory, error) {
 	query := `
-		SELECT id, transaction_id, status, details, timestamp
+		SELECT id, transaction_id, new_status, error_message, created_at
 		FROM blockchain.transaction_status_history
 		WHERE transaction_id = $1
-		ORDER BY timestamp ASC
+		ORDER BY created_at ASC
 	`
 
 	rows, err := r.db.Query(ctx, query, transactionID)
@@ -243,9 +375,13 @@ func (r *Repository) GetStatusHistory(ctx context.Context, transactionID uuid.UU
 	var history []*TransactionStatusHistory
 	for rows.Next() {
 		h := &TransactionStatusHistory{}
-		err := rows.Scan(&h.ID, &h.TransactionID, &h.Status, &h.Details, &h.Timestamp)
+		var errorMsg *string
+		err := rows.Scan(&h.ID, &h.TransactionID, &h.Status, &errorMsg, &h.Timestamp)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan status history: %w", err)
+		}
+		if errorMsg != nil {
+			h.Details = *errorMsg
 		}
 		history = append(history, h)
 	}

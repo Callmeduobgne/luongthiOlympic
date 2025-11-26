@@ -256,36 +256,3 @@ func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
 	}
 }
 
-
-		"email":  email,
-		"mspId":  mspID,
-		"role":   role,
-		"iss":    m.issuer,
-		"iat":    now.Unix(),
-		"exp":    now.Add(expiry).Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err := token.SignedString(m.jwtSecret)
-	if err != nil {
-		return "", err
-	}
-
-	return tokenString, nil
-}
-
-// GenerateRefreshToken generates a refresh token
-func (m *AuthMiddleware) GenerateRefreshToken() (string, error) {
-	return utils.GenerateRandomString(32)
-}
-
-// respondJSON writes a JSON response
-func respondJSON(w http.ResponseWriter, status int, payload interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	if payload != nil {
-		// Use json encoder
-		json.NewEncoder(w).Encode(payload)
-	}
-}
-

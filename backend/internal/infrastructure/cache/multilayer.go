@@ -76,7 +76,15 @@ func (m *MultiLayerCache) Get(
 	// 1. Check L1 cache (in-memory)
 	if data, found := m.l1Cache.Get(key); found {
 		m.logger.Debug("L1 cache hit", zap.String("key", key))
-		return m.unmarshalData(data, dest)
+		err := m.unmarshalData(data, dest)
+		if err != nil {
+			// If unmarshal fails, clear corrupted cache and fall through to database
+			m.logger.Warn("Failed to unmarshal L1 cache data, clearing cache", zap.String("key", key), zap.Error(err))
+			m.l1Cache.Delete(key)
+			// Fall through to L2 cache or database query
+		} else {
+			return nil
+		}
 	}
 
 	// 2. Check L2 cache (Redis)
@@ -84,12 +92,22 @@ func (m *MultiLayerCache) Get(
 	if err == nil && redisData != "" {
 		m.logger.Debug("L2 cache hit", zap.String("key", key))
 		
-		// Populate L1 cache
-		if err := m.l1Cache.SetJSON(key, redisData, ttls.L1TTL); err != nil {
-			m.logger.Warn("Failed to populate L1 cache", zap.Error(err))
+		// Unmarshal Redis data first to get the actual object
+		var tempData interface{}
+		if err := json.Unmarshal([]byte(redisData), &tempData); err != nil {
+			m.logger.Warn("Failed to unmarshal Redis data, clearing cache", zap.String("key", key), zap.Error(err))
+			// Clear corrupted cache
+			m.l2Cache.Delete(ctx, key)
+			// Fall through to database query
+		} else {
+			// Populate L1 cache with unmarshaled data (not JSON string)
+			if err := m.l1Cache.SetJSON(key, tempData, ttls.L1TTL); err != nil {
+				m.logger.Warn("Failed to populate L1 cache", zap.Error(err))
+			}
+			
+			// Unmarshal to destination
+			return json.Unmarshal([]byte(redisData), dest)
 		}
-		
-		return json.Unmarshal([]byte(redisData), dest)
 	}
 
 	// 3. Query database (L3)
@@ -209,14 +227,21 @@ func (m *MultiLayerCache) populateCaches(ctx context.Context, key string, data i
 
 // unmarshalData unmarshals data to destination
 func (m *MultiLayerCache) unmarshalData(data interface{}, dest interface{}) error {
-	dataBytes, ok := data.([]byte)
-	if !ok {
-		// If not []byte, try to marshal then unmarshal
-		var err error
-		dataBytes, err = json.Marshal(data)
-		if err != nil {
-			return fmt.Errorf("failed to marshal data: %w", err)
-		}
+	// Handle []byte (normal case)
+	if dataBytes, ok := data.([]byte); ok {
+		return json.Unmarshal(dataBytes, dest)
+	}
+	
+	// Handle string (JSON string - corrupted cache case)
+	if str, ok := data.(string); ok {
+		// Try to unmarshal directly as JSON string
+		return json.Unmarshal([]byte(str), dest)
+	}
+	
+	// Handle other types - marshal then unmarshal
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal data: %w", err)
 	}
 	
 	return json.Unmarshal(dataBytes, dest)

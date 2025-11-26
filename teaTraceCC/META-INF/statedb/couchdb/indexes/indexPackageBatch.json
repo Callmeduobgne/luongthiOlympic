@@ -1,0 +1,20 @@
+{
+  "index": {
+    "fields": [
+      {
+        "docType": "asc"
+      },
+      {
+        "batchId": "asc"
+      },
+      {
+        "timestamp": "desc"
+      }
+    ]
+  },
+  "ddoc": "indexPackageBatch",
+  "name": "indexPackageBatch",
+  "type": "json"
+}
+
+

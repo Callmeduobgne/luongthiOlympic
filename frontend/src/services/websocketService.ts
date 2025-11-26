@@ -26,15 +26,15 @@ export interface DashboardUpdate {
 class WebSocketService {
   private socket: WebSocket | null = null
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 10 // Increased for production
+  private maxReconnectAttempts = 5 // Reduced for faster feedback
   private reconnectTimeout: number | null = null
   private isConnecting = false
   private isManualDisconnect = false
   private currentChannel: string | null = null
   private currentToken: string | null = null
   private pingInterval: number | null = null
-  private reconnectDelay = 1000 // Initial delay: 1s
-  private maxReconnectDelay = 30000 // Max delay: 30s
+  private reconnectDelay = 500 // Reduced initial delay: 500ms for faster connection
+  private maxReconnectDelay = 5000 // Reduced max delay: 5s for faster retries
 
   connect(channel: string, token: string): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
@@ -88,25 +88,95 @@ class WebSocketService {
 
       // Convert http/https base URL to ws/wss
       // If baseURL is empty, use relative WebSocket URL (browser will use current origin)
-      const wsURL = baseURL 
+      const wsProtocolURL = baseURL
         ? baseURL.replace(/^http/i, 'ws').replace(/\/$/, '')
         : (typeof window !== 'undefined' && window.location?.protocol === 'https:' ? 'wss:' : 'ws:') + '//' + (typeof window !== 'undefined' ? window.location.host : '')
 
-      // Use native WebSocket - pass token as query param
+      // Use native WebSocket - NO token in URL (post-connection auth)
       // Backend endpoint: /api/v1/dashboard/ws/{channel}
-      const ws = new WebSocket(`${wsURL}/api/v1/dashboard/ws/${channel}?token=${encodeURIComponent(token)}`)
+      const finalWsURL = `${wsProtocolURL}/api/v1/dashboard/ws/${channel}`
+
+      // Dev mode: Log WebSocket URL
+      if (import.meta.env.DEV) {
+        console.log('🔌 [DEV] WebSocket connection:', {
+          url: finalWsURL,
+          channel,
+          authProtocol: 'post-connection',
+        })
+      }
+
+      const ws = new WebSocket(finalWsURL)
+
+      // Auth timeout handler (5 seconds)
+      let authTimeout: number | null = null
+      let isAuthenticated = false
 
       ws.onopen = () => {
-        console.log('✅ WebSocket connected to dashboard', channel)
-        this.reconnectAttempts = 0
-        this.reconnectDelay = 1000 // Reset delay on successful connection
-        this.socket = ws
-        this.isConnecting = false
-        
-        // Production best practice: Start heartbeat/ping interval
-        this.startHeartbeat()
-        
-        resolve(ws)
+        console.log('✅ WebSocket connection upgraded, sending authentication...')
+
+        // Send authentication message immediately after connection
+        // Backend expects: {"type": "auth", "token": "<jwt_token>"}
+        try {
+          const authMessage = JSON.stringify({
+            type: 'auth',
+            token: token,
+          })
+          ws.send(authMessage)
+
+          // Set auth timeout (5 seconds to match backend)
+          authTimeout = window.setTimeout(() => {
+            if (!isAuthenticated) {
+              console.error('❌ Authentication timeout - no response from server')
+              ws.close(1008, 'Authentication timeout')
+            }
+          }, 5000)
+
+        } catch (err) {
+          console.error('❌ Failed to send auth message:', err)
+          ws.close(1008, 'Failed to send auth message')
+        }
+      }
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data as string)
+
+          // Handle auth response
+          if (data.type === 'auth_success') {
+            isAuthenticated = true
+
+            // Clear auth timeout
+            if (authTimeout) {
+              clearTimeout(authTimeout)
+              authTimeout = null
+            }
+
+            console.log('✅ WebSocket authenticated successfully', {
+              user: data.user,
+              channel,
+            })
+
+            // Mark connection as ready
+            this.reconnectAttempts = 0
+            this.reconnectDelay = 500 // Reset delay on successful connection
+            this.socket = ws
+            this.isConnecting = false
+
+            // Production best practice: Start heartbeat/ping interval
+            this.startHeartbeat()
+
+            resolve(ws)
+            return
+          }
+
+          // Handle other messages (dashboard updates)
+          const dashboardUpdate: DashboardUpdate = data
+          const customEvent = new CustomEvent('dashboard:update', { detail: dashboardUpdate })
+          window.dispatchEvent(customEvent)
+
+        } catch (err) {
+          console.error('Failed to parse WebSocket message', err)
+        }
       }
 
       ws.onerror = (error) => {
@@ -126,13 +196,20 @@ class WebSocketService {
           // Production best practice: Exponential backoff for reconnection
           if (this.reconnectAttempts < this.maxReconnectAttempts && this.currentChannel && this.currentToken) {
             this.reconnectAttempts++
-            
-            // Exponential backoff: delay = min(initialDelay * 2^(attempts-1), maxDelay)
-            const delay = Math.min(
-              this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1),
-              this.maxReconnectDelay
-            )
-            
+
+            // Fast retry: First few attempts are quick, then exponential backoff
+            let delay: number
+            if (this.reconnectAttempts <= 2) {
+              // First 2 retries: Very fast (500ms, 1s)
+              delay = this.reconnectDelay * this.reconnectAttempts
+            } else {
+              // Subsequent retries: Exponential backoff but capped at maxDelay
+              delay = Math.min(
+                this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 2),
+                this.maxReconnectDelay
+              )
+            }
+
             console.log(`🔄 Reconnecting in ${delay}ms... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`)
             this.reconnectTimeout = window.setTimeout(() => {
               if (!this.isManualDisconnect && this.currentChannel && this.currentToken) {
@@ -170,7 +247,7 @@ class WebSocketService {
 
   disconnect() {
     this.isManualDisconnect = true
-    
+
     // Cancel any pending reconnect
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout)
@@ -198,7 +275,7 @@ class WebSocketService {
   // Production best practice: Heartbeat/ping to keep connection alive
   private startHeartbeat() {
     this.stopHeartbeat() // Clear any existing interval
-    
+
     // Send ping every 30 seconds (server expects pong)
     this.pingInterval = window.setInterval(() => {
       if (this.socket && this.socket.readyState === WebSocket.OPEN) {
@@ -239,52 +316,3 @@ class WebSocketService {
 }
 
 export default new WebSocketService()
-
-
-  }
-
-  // Production best practice: Heartbeat/ping to keep connection alive
-  private startHeartbeat() {
-    this.stopHeartbeat() // Clear any existing interval
-    
-    // Send ping every 30 seconds (server expects pong)
-    this.pingInterval = window.setInterval(() => {
-      if (this.socket && this.socket.readyState === WebSocket.OPEN) {
-        try {
-          // Send ping message (server will respond with pong)
-          this.socket.send(JSON.stringify({ type: 'ping' }))
-        } catch (err) {
-          console.error('Failed to send ping:', err)
-        }
-      }
-    }, 30000) // 30 seconds
-  }
-
-  private stopHeartbeat() {
-    if (this.pingInterval) {
-      clearInterval(this.pingInterval)
-      this.pingInterval = null
-    }
-  }
-
-  isConnected(): boolean {
-    return this.socket?.readyState === WebSocket.OPEN
-  }
-
-  on(event: string, callback: (data: any) => void) {
-    if (event === 'dashboard:update') {
-      window.addEventListener('dashboard:update', ((e: CustomEvent) => {
-        callback(e.detail)
-      }) as EventListener)
-    }
-  }
-
-  off(event: string, callback: (data: any) => void) {
-    if (event === 'dashboard:update') {
-      window.removeEventListener('dashboard:update', callback as EventListener)
-    }
-  }
-}
-
-export default new WebSocketService()
-

@@ -286,7 +286,7 @@ Dự án IBN Network được xây dựng **100% trên nền tảng Open Source*
 | Service | Container | Port | Description | Layer |
 |---------|-----------|------|-------------|-------|
 | **Frontend** | ibn-frontend | 3000 | React UI | Frontend |
-| **Backend API** | ibn-backend | 9090 | RESTful API | Backend |
+| **Backend API** | ibn-backend | 9090 | RESTful API (85+ endpoints) | Backend |
 | **API Gateway** | api-gateway | 8080 | Blockchain Proxy | Gateway |
 | **Admin Service** | admin-service | 8090 | Chaincode Management | Gateway |
 | **PostgreSQL** | ibn-postgres | 5432 | Database | Backend |
@@ -414,15 +414,41 @@ Authorization: Bearer <token>
 ```bash
 # Get QR code PNG for batch
 GET http://localhost:9090/api/v1/qrcode/batches/{batchId}
-Authorization: Bearer <token>
 
 # Get QR code base64 (for frontend)
 GET http://localhost:9090/api/v1/qrcode/batches/{batchId}/base64
-Authorization: Bearer <token>
+
+# Get QR code PNG for package
+GET http://localhost:9090/api/v1/qrcode/packages/{packageId}
 
 # Get QR code from transaction ID (auto-detect batch/package)
 GET http://localhost:9090/api/v1/qrcode/transactions/{txId}
-Authorization: Bearer <token>
+
+# Get NFC payload for package
+GET http://localhost:9090/api/v1/nfc/packages/{packageId}
+```
+
+### Product Verification
+
+```bash
+# Verify product by hash (Public endpoint - no auth required)
+POST http://localhost:9090/api/v1/teatrace/verify-by-hash
+Content-Type: application/json
+
+{
+  "hash": "abc123..."
+}
+
+# Response:
+{
+  "success": true,
+  "data": {
+    "is_valid": true,
+    "message": "Sản phẩm thuộc thương hiệu chúng tôi",
+    "batch_id": "BATCH001",
+    "entity_type": "batch"
+  }
+}
 ```
 
 ## 🛠️ Development
@@ -726,8 +752,8 @@ limitations under the License.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: November 2024
+**Version**: 1.1.0  
+**Last Updated**: November 24, 2025
 
 
 1. **Tính Tương Thích Cao** - Tương thích với MIT, BSD, PostgreSQL License
@@ -762,6 +788,6 @@ limitations under the License.
 
 ---
 
-**Version**: 1.0.0  
-**Last Updated**: November 2024
+**Version**: 1.1.0  
+**Last Updated**: November 24, 2025
 

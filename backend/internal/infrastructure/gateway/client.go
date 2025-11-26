@@ -286,8 +286,16 @@ func (c *Client) QueryChaincode(ctx context.Context, channelName, chaincodeName,
 		httpReq.Header.Set("Authorization", "Bearer "+token)
 	}
 
-	if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+token)
+	// Send user certificate to Gateway (for Fabric authentication with user identity)
+	// This allows queries to use user's certificate instead of service account
+	if userCert, ok := ctx.Value("user_cert").(string); ok && userCert != "" {
+		httpReq.Header.Set("X-User-Cert", userCert)
+	}
+	if userKey, ok := ctx.Value("user_key").(string); ok && userKey != "" {
+		httpReq.Header.Set("X-User-Key", userKey)
+	}
+	if mspID, ok := ctx.Value("user_msp_id").(string); ok && mspID != "" {
+		httpReq.Header.Set("X-User-MSPID", mspID)
 	}
 
 	resp, err := c.httpClient.Do(httpReq)
@@ -323,19 +331,3 @@ func (c *Client) QueryChaincode(ctx context.Context, channelName, chaincodeName,
 
 	return resultJSON, nil
 }
-
-
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		// If not JSON, return raw body
-		return body, nil
-	}
-
-	// Extract result from data field
-	resultJSON, err := json.Marshal(apiResp.Data)
-	if err != nil {
-		return body, nil
-	}
-
-	return resultJSON, nil
-}
-

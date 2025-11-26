@@ -616,6 +616,8 @@ services:
       retries: 3
       start_period: 40s
     restart: unless-stopped
+  # Frontend production build - DISABLED (using frontend-dev instead)
+  # Uncomment this section if you want to use production build
   frontend:
     container_name: ibn-frontend
     build:

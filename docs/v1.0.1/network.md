@@ -1,7 +1,8 @@
 # Core Blockchain Layer - Tổng Hợp
 
 **Ngày tạo:** 2025-11-12  
-**Version:** 1.0.0  
+**Version:** 1.1.0  
+**Last Updated:** 2025-11-24  
 **Layer:** Core/Blockchain (Hyperledger Fabric Network)
 
 ---

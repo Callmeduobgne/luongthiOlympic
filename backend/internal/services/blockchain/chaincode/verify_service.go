@@ -16,6 +16,7 @@ package chaincode
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -110,21 +111,104 @@ func (s *VerifyService) queryDatabase(ctx context.Context, hash string) (*Verify
 	// Option 1: Query transaction by tx_id (with index)
 	// Note: transactions table is in auth schema (shared with api-gateway)
 	var txID, chaincodeName string
+	var argsJSON []byte
 	queryTx := `
-		SELECT tx_id, chaincode_name
+		SELECT tx_id, chaincode_name, args
 		FROM auth.transactions
 		WHERE tx_id = $1
 		LIMIT 1
 	`
-	err := s.db.QueryRow(ctx, queryTx, hash).Scan(&txID, &chaincodeName)
+	err := s.db.QueryRow(ctx, queryTx, hash).Scan(&txID, &chaincodeName, &argsJSON)
 	if err == nil && chaincodeName == "teaTraceCC" {
 		// Found transaction related to teaTraceCC
-		return &VerifyByHashResponse{
-			IsValid:      true,
-			Message:      "Sản phẩm thuộc thương hiệu chúng tôi",
+		response := &VerifyByHashResponse{
+			IsValid:       true,
+			Message:       "Sản phẩm thuộc thương hiệu chúng tôi (Verified)",
 			TransactionID: txID,
-			EntityType:   "transaction",
-		}, nil
+			EntityType:    "transaction",
+			VerifiedAt:    time.Now(),
+			VerificationMethod: "blockchain_query",
+		}
+		s.logger.Info("VERIFY DEBUG: Transaction found", zap.String("txID", txID))
+
+		// Try to parse args to get more info
+		var args []string
+		if len(argsJSON) > 0 {
+			_ = json.Unmarshal(argsJSON, &args)
+		}
+
+		// If args available, try to fetch details
+		if len(args) > 0 {
+			// Check function name (we need to fetch function name too)
+			var functionName string
+			_ = s.db.QueryRow(ctx, "SELECT function_name FROM auth.transactions WHERE tx_id = $1", txID).Scan(&functionName)
+
+			if functionName == "createPackage" && len(args) >= 2 {
+				// args: [packageId, batchId, weight, productionDate, expiryDate?]
+				packageID := args[0]
+				batchID := args[1]
+				response.PackageID = packageID
+				response.BatchID = batchID
+				response.EntityType = "package"
+
+				// Initialize ProductDetails from args (fallback)
+				response.ProductDetails = &ProductDetails{
+					ProductionDate: args[3],
+				}
+				if len(args) >= 3 {
+					fmt.Sscanf(args[2], "%f", &response.ProductDetails.Weight)
+				}
+				if len(args) >= 5 {
+					response.ProductDetails.ExpiryDate = args[4]
+				}
+
+				// Fetch package details (live data)
+				pkg, err := s.teaTraceSvc.GetPackage(ctx, packageID)
+				if err == nil {
+					response.ProductDetails.Status = string(pkg.Status)
+					// Update with live data if available
+					if pkg.ExpiryDate != "" {
+						response.ProductDetails.ExpiryDate = pkg.ExpiryDate
+					}
+				}
+
+				// Fetch batch details (for farm info)
+				batch, err := s.teaTraceSvc.GetBatch(ctx, batchID)
+				if err == nil {
+					response.ProductDetails.FarmLocation = batch.FarmLocation
+					response.ProductDetails.HarvestDate = batch.HarvestDate
+					response.ProductDetails.ProcessingInfo = batch.ProcessingInfo
+					response.ProductDetails.QualityCert = batch.QualityCert
+				}
+			} else if functionName == "createBatch" && len(args) >= 1 {
+				// args: [batchId, farmName, harvestDate, certification, certificateID]
+				batchID := args[0]
+				response.BatchID = batchID
+				response.EntityType = "batch"
+				
+				// Initialize ProductDetails from args
+				response.ProductDetails = &ProductDetails{}
+				if len(args) >= 3 {
+					response.ProductDetails.FarmLocation = args[1]
+					response.ProductDetails.HarvestDate = args[2]
+				}
+				if len(args) >= 4 {
+					response.ProductDetails.QualityCert = args[3]
+				}
+
+				// Fetch batch details (live data)
+				batch, err := s.teaTraceSvc.GetBatch(ctx, batchID)
+				if err == nil {
+					response.ProductDetails.FarmLocation = batch.FarmLocation
+					response.ProductDetails.HarvestDate = batch.HarvestDate
+					response.ProductDetails.ProcessingInfo = batch.ProcessingInfo
+					response.ProductDetails.QualityCert = batch.QualityCert
+					response.ProductDetails.Status = string(batch.Status)
+				}
+			}
+		}
+
+		return response, nil
 	}
 
 	// Option 2: Query all batches and check verificationHash
@@ -133,12 +217,24 @@ func (s *VerifyService) queryDatabase(ctx context.Context, hash string) (*Verify
 	if err == nil {
 		for _, batch := range batches {
 			if batch.VerificationHash == hash {
-				return &VerifyByHashResponse{
-					IsValid: true,
-					Message: "Sản phẩm thuộc thương hiệu chúng tôi",
-					BatchID:  batch.BatchID,
-					EntityType: "batch",
-				}, nil
+				response := &VerifyByHashResponse{
+					IsValid:       true,
+					Message:       "Sản phẩm thuộc thương hiệu chúng tôi",
+					BatchID:       batch.BatchID,
+					EntityType:    "batch",
+					VerifiedAt:    time.Now(),
+					VerificationMethod: "blockchain_query",
+				}
+				
+				response.ProductDetails = &ProductDetails{
+					FarmLocation:   batch.FarmLocation,
+					HarvestDate:    batch.HarvestDate,
+					ProcessingInfo: batch.ProcessingInfo,
+					QualityCert:    batch.QualityCert,
+					Status:         string(batch.Status),
+				}
+				
+				return response, nil
 			}
 		}
 	}

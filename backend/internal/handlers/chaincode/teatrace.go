@@ -26,9 +26,10 @@ import (
 
 // TeaTraceHandler handles HTTP requests for TeaTrace chaincode
 type TeaTraceHandler struct {
-	service      chaincode.TeaTraceService // Use interface to support both implementations
-	verifyService *chaincode.VerifyService // Service for hash verification
-	logger       *zap.Logger
+	service            chaincode.TeaTraceService       // Use interface to support both implementations
+	verifyService      *chaincode.VerifyService        // Service for hash verification (legacy)
+	merkleVerifyService *chaincode.MerkleVerifyService // Service for Merkle proof verification (new)
+	logger             *zap.Logger
 }
 
 // NewTeaTraceHandler creates a new TeaTrace handler
@@ -45,6 +46,22 @@ func NewTeaTraceHandlerWithVerify(service chaincode.TeaTraceService, verifyServi
 		service:       service,
 		verifyService: verifyService,
 		logger:        logger,
+	}
+}
+
+// NewTeaTraceHandlerWithMerkleVerify creates a new TeaTrace handler with Merkle verify service
+// This is the recommended constructor for new deployments
+func NewTeaTraceHandlerWithMerkleVerify(
+	service chaincode.TeaTraceService,
+	verifyService *chaincode.VerifyService,
+	merkleVerifyService *chaincode.MerkleVerifyService,
+	logger *zap.Logger,
+) *TeaTraceHandler {
+	return &TeaTraceHandler{
+		service:             service,
+		verifyService:       verifyService,
+		merkleVerifyService: merkleVerifyService,
+		logger:              logger,
 	}
 }
 
@@ -216,6 +233,28 @@ func (h *TeaTraceHandler) CreatePackage(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// GetPackage handles retrieving a tea package by ID
+// GET /api/v1/teatrace/packages/:packageId
+func (h *TeaTraceHandler) GetPackage(w http.ResponseWriter, r *http.Request) {
+	packageID := chi.URLParam(r, "packageId")
+	if packageID == "" {
+		http.Error(w, "Package ID is required", http.StatusBadRequest)
+		return
+	}
+
+	pkg, err := h.service.GetPackage(r.Context(), packageID)
+	if err != nil {
+		h.logger.Error("Failed to get package", 
+			zap.String("package_id", packageID), 
+			zap.Error(err))
+		http.Error(w, "Package not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(pkg)
+}
+
 // UpdateBatchStatus handles updating the status of a tea batch
 func (h *TeaTraceHandler) UpdateBatchStatus(w http.ResponseWriter, r *http.Request) {
 	batchID := chi.URLParam(r, "batchId")
@@ -277,14 +316,9 @@ func (h *TeaTraceHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // VerifyByHash handles product verification by hash/blockhash
+// Now supports Merkle proof for ultra-fast verification (< 10ms)
 // POST /api/v1/teatrace/verify-by-hash
 func (h *TeaTraceHandler) VerifyByHash(w http.ResponseWriter, r *http.Request) {
-	if h.verifyService == nil {
-		h.logger.Error("VerifyService not initialized")
-		http.Error(w, "Service unavailable", http.StatusInternalServerError)
-		return
-	}
-
 	var req chaincode.VerifyByHashRequest
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -304,12 +338,59 @@ func (h *TeaTraceHandler) VerifyByHash(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Call verify service
-	result, err := h.verifyService.VerifyByHash(r.Context(), req.Hash)
-	if err != nil {
-		h.logger.Error("Failed to verify hash", zap.Error(err))
-		http.Error(w, "Failed to verify hash", http.StatusInternalServerError)
-		return
+	var result *chaincode.VerifyByHashResponse
+	var err error
+
+	// Priority 1: Try Merkle proof verification if available
+	useMerkleProof := h.merkleVerifyService != nil && len(req.MerkleProof) > 0 && req.MerkleRoot != ""
+	
+	if useMerkleProof {
+		h.logger.Info("Using Merkle proof verification",
+			zap.String("hash", req.Hash[:min(16, len(req.Hash))]),
+			zap.Int("proof_steps", len(req.MerkleProof)),
+		)
+		
+		result, err = h.merkleVerifyService.VerifyWithMerkleProof(
+			r.Context(),
+			req.Hash,
+			req.MerkleProof,
+			req.MerkleRoot,
+			req.BlockNumber,
+		)
+		
+		if err == nil {
+			// Success with Merkle proof
+			h.logger.Info("Verification completed via Merkle proof",
+				zap.String("hash", req.Hash[:min(16, len(req.Hash))]),
+				zap.Bool("is_valid", result.IsValid),
+			)
+		} else {
+			// Merkle proof failed, will fallback to legacy
+			h.logger.Warn("Merkle proof verification failed, falling back to legacy",
+				zap.Error(err),
+			)
+			useMerkleProof = false // Force fallback
+		}
+	}
+	
+	// Priority 2: Legacy hash verification (if Merkle proof not used or failed)
+	if !useMerkleProof || err != nil {
+		if h.verifyService == nil {
+			h.logger.Error("No verification service available")
+			http.Error(w, "Service unavailable", http.StatusInternalServerError)
+			return
+		}
+
+		h.logger.Info("Using legacy hash verification",
+			zap.String("hash", req.Hash[:min(16, len(req.Hash))]),
+		)
+
+		result, err = h.verifyService.VerifyByHash(r.Context(), req.Hash)
+		if err != nil {
+			h.logger.Error("Failed to verify hash", zap.Error(err))
+			http.Error(w, "Failed to verify hash", http.StatusInternalServerError)
+			return
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -318,5 +399,13 @@ func (h *TeaTraceHandler) VerifyByHash(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"data":    result,
 	})
+}
+
+// Helper function to get minimum of two integers
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 

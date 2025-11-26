@@ -104,6 +104,83 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.1.0] - 2025-11-24
+
+### Added
+- **QR Code Generation System**
+  - QR code generation for batches: `GET /api/v1/qrcode/batches/{batchId}`
+  - QR code generation for packages: `GET /api/v1/qrcode/packages/{packageId}`
+  - QR code from transaction ID: `GET /api/v1/qrcode/transactions/{txId}`
+  - Base64 data URI support: `/base64` endpoints
+  - QR code data structure: `/data` endpoints
+  - Frontend component `QRCodeDisplay` for display and download
+  
+- **Product Verification by Hash**
+  - Endpoint: `POST /api/v1/teatrace/verify-by-hash`
+  - Verify products by hash/blockhash/transaction ID
+  - Multi-layer caching (L1: 5min, L2: 24h)
+  - Rate limiting (10 requests/minute/IP)
+  - Public endpoint (no authentication required)
+  
+- **NFC Support**
+  - NFC payload generation: `GET /api/v1/nfc/packages/{packageId}`
+  - NDEF format support for NFC tags
+  
+- **Dashboard Improvements**
+  - Real-time WebSocket dashboard handler
+  - Enhanced WebSocket authentication in API Gateway
+  - Improved dashboard service with better data fetching
+  
+- **Chaincode Enhancements**
+  - Tea package model with validation
+  - Package creation: `createPackage` function
+  - Enhanced validation utilities
+  - Support for package lifecycle tracking
+
+- **Database Optimizations**
+  - Migration 016: Hash verification indexes
+  - Composite index for teaTraceCC transactions
+  - Optimized queries for hash verification
+
+- **Infrastructure**
+  - Fabric connection manager with health checks
+  - gRPC credentials management
+  - Improved error handling and logging
+
+### Changed
+- **Frontend Architecture Fix**
+  - Frontend now calls Backend (port 9090) instead of Gateway directly
+  - Updated Vite proxy configuration to point to backend
+  - Fixed API config for proper service communication
+  
+- **API Gateway**
+  - Enhanced WebSocket authentication flow
+  - Improved nginx configuration for WebSocket support
+  - Better error handling in dashboard WebSocket
+
+- **Backend**
+  - Enhanced Gateway client with better error handling
+  - Improved authentication middleware
+  - Better service initialization and dependency injection
+
+### Fixed
+- Frontend-Backend communication architecture
+- WebSocket authentication flow
+- API endpoint routing
+- Service dependency injection
+
+### Security
+- Rate limiting for verification endpoints
+- Enhanced WebSocket authentication
+- Improved error messages (no sensitive data leakage)
+
+### Performance
+- Multi-layer caching for verification (L1: 5min, L2: 24h)
+- Database indexes for hash queries
+- Optimized chaincode queries
+
+---
+
 ## [Unreleased]
 
 ### Planned
@@ -115,6 +192,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[1.1.0]: https://github.com/Callmeduobgne/luongthiOlympic/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Callmeduobgne/luongthiOlympic/releases/tag/v1.0.0
 
 

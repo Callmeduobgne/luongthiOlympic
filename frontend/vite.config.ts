@@ -37,7 +37,37 @@ export default defineConfig({
         target: process.env.VITE_API_BASE_URL || 'http://localhost:9090',
         changeOrigin: true,
         ws: true, // Enable WebSocket for both HMR and API WebSocket endpoints
-        rewrite: (path) => path, // Keep original path
+        rewrite: (path) => path, // Keep original path (including query parameters)
+        configure: (proxy, _options) => {
+          // Production best practice: Configure WebSocket upgrade properly
+          proxy.on('error', (err, _req, _res) => {
+            console.log('Proxy error:', err)
+          })
+          proxy.on('proxyReqWs', (proxyReq, req) => {
+            // CRITICAL: Ensure query parameters are preserved in WebSocket URL
+            // Vite proxy should preserve query params automatically, but we ensure it here
+            const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`)
+            
+            // Ensure WebSocket upgrade headers are set correctly
+            proxyReq.setHeader('Upgrade', req.headers.upgrade || 'websocket')
+            proxyReq.setHeader('Connection', req.headers.connection || 'Upgrade')
+            
+            // Forward Authorization header if present (fallback for token)
+            if (req.headers.authorization) {
+              proxyReq.setHeader('Authorization', req.headers.authorization)
+            }
+            
+            // Log WebSocket connection attempt for debugging (dev only)
+            if (process.env.NODE_ENV === 'development') {
+              console.log('[Vite Proxy] WebSocket connection:', {
+                url: req.url,
+                path: url.pathname,
+                query: url.search,
+                token: url.searchParams.get('token') ? 'present' : 'missing',
+              })
+            }
+          })
+        },
       },
     },
   },

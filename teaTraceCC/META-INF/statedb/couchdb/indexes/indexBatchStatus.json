@@ -1,0 +1,20 @@
+{
+  "index": {
+    "fields": [
+      {
+        "docType": "asc"
+      },
+      {
+        "status": "asc"
+      },
+      {
+        "timestamp": "desc"
+      }
+    ]
+  },
+  "ddoc": "indexBatchStatus",
+  "name": "indexBatchStatus",
+  "type": "json"
+}
+
+

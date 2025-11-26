@@ -420,9 +420,3 @@ func GetWebSocketMetrics() map[string]interface{} {
 		"connection_errors":  connectionErrors,
 	}
 }
-
-		"total_connections":  totalConnections,
-		"total_messages":     totalMessages,
-		"connection_errors":  connectionErrors,
-	}
-}

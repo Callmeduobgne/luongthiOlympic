@@ -17,6 +17,7 @@
 export type TeaBatchStatus = "CREATED" | "VERIFIED" | "EXPIRED";
 
 export interface TeaBatch {
+  docType: "batch"; // Document type for CouchDB indexing
   batchId: string;
   farmLocation: string;
   harvestDate: string;
