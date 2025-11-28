@@ -42,16 +42,17 @@ export const QRCodeDisplay = ({
 }: QRCodeDisplayProps) => {
   const [downloadLoading, setDownloadLoading] = useState(false)
 
-  // Generate verification URL for QR code
+  // Generate verification URL for QR code (use production URL, not dev)
   const verificationUrl = useMemo(() => {
+    const baseUrl = API_CONFIG.FRONTEND_URL
     if (packageId) {
-      return `${window.location.origin}/verify/packages/${packageId}`
+      return `${baseUrl}/verify/packages/${packageId}`
     }
     if (txId) {
-      return `${window.location.origin}/verify/hash?hash=${txId}`
+      return `${baseUrl}/verify/hash?hash=${txId}`
     }
     if (batchId) {
-      return `${window.location.origin}/verify/batches/${batchId}`
+      return `${baseUrl}/verify/batches/${batchId}`
     }
     return ''
   }, [packageId, txId, batchId])

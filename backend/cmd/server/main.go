@@ -462,6 +462,56 @@ func setupRoutes(
 				
 				json.NewEncoder(w).Encode(receipt)
 			})
+
+			// Get Transaction by NFC Tag ID
+			r.Get("/nfc/{tagId}", func(w http.ResponseWriter, r *http.Request) {
+				tagId := chi.URLParam(r, "tagId")
+				tx, err := blockchainDBService.GetTransactionByNfcId(r.Context(), tagId)
+				if err != nil {
+					http.Error(w, "NFC Tag not found", http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"data":    tx,
+				})
+			})
+
+			// Update Transaction NFC Tag ID
+			r.Post("/transactions/{txId}/nfc", func(w http.ResponseWriter, r *http.Request) {
+				txId := chi.URLParam(r, "txId")
+				
+				var body struct {
+					NfcId string `json:"nfcId"`
+				}
+				if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+					http.Error(w, "Invalid request body", http.StatusBadRequest)
+					return
+				}
+
+				if body.NfcId == "" {
+					http.Error(w, "NfcId is required", http.StatusBadRequest)
+					return
+				}
+
+				err := blockchainDBService.UpdateTransactionNfcId(r.Context(), txId, body.NfcId)
+				if err != nil {
+					if err.Error() == "transaction not found" {
+						http.Error(w, "Transaction not found", http.StatusNotFound)
+					} else {
+						logger.Error("Failed to update NFC ID", zap.Error(err))
+						http.Error(w, "Internal server error", http.StatusInternalServerError)
+					}
+					return
+				}
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"message": "NFC Tag assigned successfully",
+				})
+			})
 		})
 	})
 

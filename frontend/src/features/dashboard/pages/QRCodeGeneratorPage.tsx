@@ -22,6 +22,7 @@ import { Button } from '@shared/components/ui/Button'
 import { Spinner } from '@shared/components/ui/Spinner'
 import api from '@shared/utils/api'
 import toast from 'react-hot-toast'
+import { API_CONFIG } from '@shared/config/api.config'
 
 type QRCodeType = 'batch' | 'package' | 'transaction'
 
@@ -100,14 +101,33 @@ export const QRCodeGeneratorPage = () => {
   const { data: transactions, isLoading: transactionsLoading } = useQuery<Transaction[]>({
     queryKey: ['transactions-list'],
     queryFn: async () => {
-      const response = await api.get('/api/v1/blockchain/transactions?limit=50')
-      return response.data.data || []
+      try {
+        const response = await api.get('/api/v1/blockchain/transactions?limit=50')
+        const data = response.data?.data || []
+
+        // Map backend format (camelCase) to frontend format (snake_case)
+        return data.map((tx: any) => ({
+          tx_id: tx.txId || tx.tx_id || '',
+          function_name: tx.functionName || tx.function_name || '',
+          status: tx.status || '',
+          block_number: tx.blockNumber || tx.block_number || 0,
+          timestamp: tx.timestamp || '',
+          args: tx.args || [],
+        })).filter((tx: Transaction) => tx.tx_id) // Filter out invalid transactions
+      } catch (error) {
+        console.error('Failed to fetch transactions:', error)
+        return []
+      }
     },
     enabled: qrCodeType === 'transaction',
     refetchInterval: 10000,
   })
 
   const handleCopyId = (id: string) => {
+    if (!id || id === 'undefined' || id === 'null') {
+      toast.error('Không có ID để copy')
+      return
+    }
     navigator.clipboard.writeText(id)
     setCopiedId(id)
     setTimeout(() => setCopiedId(null), 2000)
@@ -140,7 +160,18 @@ export const QRCodeGeneratorPage = () => {
     setInputValue('')
   }
 
-  const handleSelectFromList = (id: string, hash?: string) => {
+  const handleSelectFromList = (id: string, hash?: string, e?: React.MouseEvent) => {
+    // Prevent event bubbling to avoid triggering multiple actions
+    if (e) {
+      e.stopPropagation()
+    }
+
+    // Validate ID
+    if (!id || id === 'undefined' || id === 'null') {
+      toast.error('ID không hợp lệ')
+      return
+    }
+
     switch (qrCodeType) {
       case 'batch':
         setSelectedBatchId(id)
@@ -291,40 +322,46 @@ export const QRCodeGeneratorPage = () => {
                       <Spinner size="lg" />
                     </div>
                   ) : batches && batches.length > 0 ? (
-                    batches.map((batch: any, index: number) => (
-                      <div
-                        key={batch.batch_id || batch.id || index}
-                        onClick={() => handleSelectFromList(batch.batch_id || batch.id)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedBatchId === (batch.batch_id || batch.id)
-                          ? 'bg-green-500/20 border-green-500/50'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="text-sm text-white font-medium">
-                              {batch.batch_id || batch.id}
-                            </p>
-                            {batch.name && (
-                              <p className="text-xs text-gray-400 mt-1">{batch.name}</p>
-                            )}
+                    batches.map((batch: any, index: number) => {
+                      const batchId = batch.batch_id || batch.id
+                      if (!batchId) return null // Skip if no ID
+
+                      return (
+                        <div
+                          key={batchId || index}
+                          onClick={(e) => handleSelectFromList(batchId, undefined, e)}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedBatchId === batchId
+                            ? 'bg-green-500/20 border-green-500/50'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="text-sm text-white font-medium">
+                                {batchId}
+                              </p>
+                              {batch.name && (
+                                <p className="text-xs text-gray-400 mt-1">{batch.name}</p>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyId(batchId)
+                              }}
+                              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                              title="Copy ID"
+                            >
+                              {copiedId === batchId ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCopyId(batch.batch_id || batch.id)
-                            }}
-                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                          >
-                            {copiedId === (batch.batch_id || batch.id) ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-gray-400" />
-                            )}
-                          </button>
                         </div>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="text-center py-8 text-gray-400">
                       Không có batch nào
@@ -340,48 +377,54 @@ export const QRCodeGeneratorPage = () => {
                       <Spinner size="lg" />
                     </div>
                   ) : packages && packages.length > 0 ? (
-                    packages.map((pkg: any) => (
-                      <div
-                        key={pkg.tx_id}
-                        onClick={() => handleSelectFromList(pkg.package_id || pkg.id, pkg.block_hash || pkg.blockHash)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedPackageId === (pkg.package_id || pkg.id)
-                          ? 'bg-green-500/20 border-green-500/50'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="text-sm text-white font-medium">
-                              {pkg.package_id || pkg.id}
-                            </p>
-                            {pkg.name && (
-                              <p className="text-xs text-gray-400 mt-1">{pkg.name}</p>
-                            )}
-                            {(pkg.block_hash || pkg.blockHash) && (
-                              <div className="mt-2 flex items-center gap-2">
-                                <Hash className="w-3 h-3 text-gray-500" />
-                                <p className="text-xs text-gray-500 font-mono truncate">
-                                  Hash: {(pkg.block_hash || pkg.blockHash).substring(0, 16)}...
-                                </p>
-                              </div>
-                            )}
+                    packages.map((pkg: any) => {
+                      const packageId = pkg.package_id || pkg.id
+                      if (!packageId) return null // Skip if no ID
+
+                      return (
+                        <div
+                          key={pkg.tx_id || packageId}
+                          onClick={(e) => handleSelectFromList(packageId, pkg.block_hash || pkg.blockHash, e)}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedPackageId === packageId
+                            ? 'bg-green-500/20 border-green-500/50'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                            }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="text-sm text-white font-medium">
+                                {packageId}
+                              </p>
+                              {pkg.name && (
+                                <p className="text-xs text-gray-400 mt-1">{pkg.name}</p>
+                              )}
+                              {(pkg.block_hash || pkg.blockHash) && (
+                                <div className="mt-2 flex items-center gap-2">
+                                  <Hash className="w-3 h-3 text-gray-500" />
+                                  <p className="text-xs text-gray-500 font-mono truncate">
+                                    Hash: {(pkg.block_hash || pkg.blockHash).substring(0, 16)}...
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyId(packageId)
+                              }}
+                              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                              title="Copy ID"
+                            >
+                              {copiedId === packageId ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCopyId(pkg.package_id || pkg.id)
-                            }}
-                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                          >
-                            {copiedId === (pkg.package_id || pkg.id) ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-gray-400" />
-                            )}
-                          </button>
                         </div>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="text-center py-8 text-gray-400">
                       Không có package nào
@@ -397,51 +440,56 @@ export const QRCodeGeneratorPage = () => {
                       <Spinner size="lg" />
                     </div>
                   ) : transactions && transactions.length > 0 ? (
-                    transactions.map((tx) => (
-                      <div
-                        key={tx.tx_id}
-                        onClick={() => handleSelectFromList(tx.tx_id)}
-                        className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedTxId === tx.tx_id
-                          ? 'bg-green-500/20 border-green-500/50'
-                          : 'bg-white/5 border-white/10 hover:bg-white/10'
-                          }`}
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-xs font-medium text-green-400 bg-green-500/20 px-2 py-0.5 rounded">
-                                {tx.function_name}
-                              </span>
-                              <span className="text-xs text-gray-400">
-                                Block #{tx.block_number}
-                              </span>
+                    transactions.map((tx) => {
+                      if (!tx.tx_id) return null // Skip if no tx_id
+
+                      return (
+                        <div
+                          key={tx.tx_id}
+                          onClick={(e) => handleSelectFromList(tx.tx_id, undefined, e)}
+                          className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedTxId === tx.tx_id
+                            ? 'bg-green-500/20 border-green-500/50'
+                            : 'bg-white/5 border-white/10 hover:bg-white/10'
+                            }`}
+                        >
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="text-xs font-medium text-green-400 bg-green-500/20 px-2 py-0.5 rounded">
+                                  {tx.function_name || 'N/A'}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  Block #{tx.block_number || 'N/A'}
+                                </span>
+                              </div>
+                              <p className="text-sm text-white font-medium">
+                                {getEntityId(tx)}
+                              </p>
                             </div>
-                            <p className="text-sm text-white font-medium">
-                              {getEntityId(tx)}
-                            </p>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleCopyId(tx.tx_id)
+                              }}
+                              className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
+                              title="Copy Transaction ID"
+                            >
+                              {copiedId === tx.tx_id ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400" />
+                              )}
+                            </button>
                           </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleCopyId(tx.tx_id)
-                            }}
-                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors"
-                          >
-                            {copiedId === tx.tx_id ? (
-                              <Check className="w-4 h-4 text-green-400" />
-                            ) : (
-                              <Copy className="w-4 h-4 text-gray-400" />
-                            )}
-                          </button>
+                          <p className="text-xs text-gray-500 font-mono truncate">
+                            {tx.tx_id}
+                          </p>
+                          <p className="text-xs text-gray-400 mt-1">
+                            {tx.timestamp ? new Date(tx.timestamp).toLocaleString() : 'N/A'}
+                          </p>
                         </div>
-                        <p className="text-xs text-gray-500 font-mono truncate">
-                          {tx.tx_id}
-                        </p>
-                        <p className="text-xs text-gray-400 mt-1">
-                          {new Date(tx.timestamp).toLocaleString()}
-                        </p>
-                      </div>
-                    ))
+                      )
+                    })
                   ) : (
                     <div className="text-center py-8 text-gray-400">
                       Không có transaction nào
@@ -529,10 +577,10 @@ export const QRCodeGeneratorPage = () => {
                       </label>
                       <p className="text-sm text-green-400 mt-1 font-mono break-all">
                         {selectedBatchId
-                          ? `${window.location.origin}/verify/batches/${selectedBatchId}`
+                          ? `${API_CONFIG.FRONTEND_URL}/verify/batches/${selectedBatchId}`
                           : selectedPackageId
-                            ? `${window.location.origin}/verify/packages/${selectedPackageId}`
-                            : `${window.location.origin}/verify/hash?hash=${selectedTxId}`}
+                            ? `${API_CONFIG.FRONTEND_URL}/verify/packages/${selectedPackageId}`
+                            : `${API_CONFIG.FRONTEND_URL}/verify/hash?hash=${selectedTxId}`}
                       </p>
                     </div>
                   </div>
@@ -542,10 +590,10 @@ export const QRCodeGeneratorPage = () => {
                     className="w-full"
                     onClick={() => {
                       const url = selectedBatchId
-                        ? `/verify/batches/${selectedBatchId}`
+                        ? `${API_CONFIG.FRONTEND_URL}/verify/batches/${selectedBatchId}`
                         : selectedPackageId
-                          ? `/verify/packages/${selectedPackageId}`
-                          : `/verify/hash?hash=${selectedTxId}`
+                          ? `${API_CONFIG.FRONTEND_URL}/verify/packages/${selectedPackageId}`
+                          : `${API_CONFIG.FRONTEND_URL}/verify/hash?hash=${selectedTxId}`
                       window.open(url, '_blank')
                     }}
                   >

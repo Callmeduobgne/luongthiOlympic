@@ -103,7 +103,7 @@ type TestConfiguration struct {
 // CreateTestSuite creates a new test suite
 func (r *Repository) CreateTestSuite(ctx context.Context, suite *TestSuite) error {
 	query := `
-		INSERT INTO blockchain.test_suites (
+		INSERT INTO test_suites (
 			id, chaincode_version_id, name, description, test_type,
 			status, metadata, created_by
 		) VALUES (
@@ -137,7 +137,7 @@ func (r *Repository) GetTestSuiteByID(ctx context.Context, id uuid.UUID) (*TestS
 		       total_tests, passed_tests, failed_tests, skipped_tests,
 		       output, error_message, error_code, metadata,
 		       created_by, created_at, updated_at
-		FROM blockchain.test_suites
+		FROM test_suites
 		WHERE id = $1
 	`
 
@@ -169,7 +169,7 @@ func (r *Repository) GetTestSuiteByID(ctx context.Context, id uuid.UUID) (*TestS
 // UpdateTestSuiteStatus updates the status of a test suite
 func (r *Repository) UpdateTestSuiteStatus(ctx context.Context, id uuid.UUID, status string, errorMsg *string, errorCode *string) error {
 	query := `
-		UPDATE blockchain.test_suites
+		UPDATE test_suites
 		SET status = $2, error_message = $3, error_code = $4,
 		    started_at = CASE WHEN $2 = 'running' AND started_at IS NULL THEN CURRENT_TIMESTAMP ELSE started_at END,
 		    completed_at = CASE WHEN $2 IN ('passed', 'failed', 'skipped') THEN CURRENT_TIMESTAMP ELSE completed_at END
@@ -192,7 +192,7 @@ func (r *Repository) ListTestSuites(ctx context.Context, filters *TestSuiteFilte
 		       total_tests, passed_tests, failed_tests, skipped_tests,
 		       output, error_message, error_code, metadata,
 		       created_by, created_at, updated_at
-		FROM blockchain.test_suites
+		FROM test_suites
 		WHERE 1=1
 	`
 
@@ -275,7 +275,7 @@ type TestSuiteFilters struct {
 // CreateTestCase creates a new test case
 func (r *Repository) CreateTestCase(ctx context.Context, testCase *TestCase) error {
 	query := `
-		INSERT INTO blockchain.test_cases (
+		INSERT INTO test_cases (
 			id, test_suite_id, name, description, test_function,
 			status, metadata
 		) VALUES (
@@ -304,7 +304,7 @@ func (r *Repository) CreateTestCase(ctx context.Context, testCase *TestCase) err
 // UpdateTestCaseStatus updates the status of a test case
 func (r *Repository) UpdateTestCaseStatus(ctx context.Context, id uuid.UUID, status string, output *string, errorMsg *string, errorStack *string, assertions json.RawMessage) error {
 	query := `
-		UPDATE blockchain.test_cases
+		UPDATE test_cases
 		SET status = $2, output = $3, error_message = $4, error_stack = $5, assertions = $6,
 		    started_at = CASE WHEN $2 = 'running' AND started_at IS NULL THEN CURRENT_TIMESTAMP ELSE started_at END,
 		    completed_at = CASE WHEN $2 IN ('passed', 'failed', 'skipped') THEN CURRENT_TIMESTAMP ELSE completed_at END
@@ -331,7 +331,7 @@ func (r *Repository) GetTestCasesBySuiteID(ctx context.Context, suiteID uuid.UUI
 		       status, started_at, completed_at, duration_ms,
 		       output, error_message, error_stack, assertions, metadata,
 		       created_at, updated_at
-		FROM blockchain.test_cases
+		FROM test_cases
 		WHERE test_suite_id = $1
 		ORDER BY created_at ASC
 	`
@@ -378,7 +378,7 @@ func (r *Repository) GetActiveTestConfiguration(ctx context.Context, testType st
 		       required_to_pass, environment_vars, test_data,
 		       min_chaincode_version, required_functions, is_active,
 		       created_by, created_at, updated_at, deleted_at
-		FROM blockchain.test_configurations
+		FROM test_configurations
 		WHERE test_type = $1 AND is_active = TRUE AND deleted_at IS NULL
 		ORDER BY created_at DESC
 		LIMIT 1
@@ -417,7 +417,7 @@ func (r *Repository) GetActiveTestConfiguration(ctx context.Context, testType st
 // CreateTestExecutionHistory creates a test execution history entry
 func (r *Repository) CreateTestExecutionHistory(ctx context.Context, versionID uuid.UUID, suiteID *uuid.UUID, configID *uuid.UUID, executionType string, status string, triggeredBy *uuid.UUID, metadata json.RawMessage) error {
 	query := `
-		INSERT INTO blockchain.test_execution_history (
+		INSERT INTO test_execution_history (
 			chaincode_version_id, test_suite_id, test_configuration_id,
 			execution_type, overall_status, triggered_by, metadata
 		) VALUES (

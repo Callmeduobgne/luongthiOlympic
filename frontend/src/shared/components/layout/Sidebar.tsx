@@ -23,6 +23,7 @@ import {
   Settings,
   ChevronRight,
   Code,
+  Radio,
 } from 'lucide-react'
 import { cn } from '@shared/utils/cn'
 
@@ -48,6 +49,11 @@ const navItems: NavItem[] = [
     label: 'Deploy Chaincode',
     path: '/deploy-chaincode',
     icon: Code,
+  },
+  {
+    label: 'NFC Manager',
+    path: '/dashboard/nfc',
+    icon: Radio,
   },
   {
     label: 'Blockchain Explorer',

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -21,6 +22,7 @@ type Transaction struct {
 	BlockHash     string    `json:"blockHash"`
 	Timestamp     time.Time `json:"timestamp"`
 	Args          []string  `json:"args"`
+	NfcTagId      string    `json:"nfcTagId"`
 }
 
 // BlockInfo represents block information from DB
@@ -57,9 +59,11 @@ func (s *Service) ListTransactions(ctx context.Context, limit, offset int) ([]Tr
 	// Get transactions
 	rows, err := s.db.Query(ctx, `
 		SELECT id, tx_id, channel_name, chaincode_name, function_name, status, 
-		       COALESCE(block_number, 0), COALESCE(block_hash, ''), timestamp
+		       COALESCE(block_number, 0), COALESCE(block_hash, ''), 
+		       COALESCE(timestamp, created_at) as timestamp,
+		       COALESCE(args, '[]'::jsonb)
 		FROM transactions
-		ORDER BY timestamp DESC
+		ORDER BY COALESCE(timestamp, created_at) DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -72,14 +76,27 @@ func (s *Service) ListTransactions(ctx context.Context, limit, offset int) ([]Tr
 	for rows.Next() {
 		var tx Transaction
 		var idStr string
+		var argsJSON []byte
 		err := rows.Scan(
 			&idStr, &tx.TxID, &tx.ChannelName, &tx.ChaincodeName, &tx.FunctionName,
 			&tx.Status, &tx.BlockNumber, &tx.BlockHash, &tx.Timestamp,
+			&argsJSON,
 		)
 		if err != nil {
 			s.logger.Error("Failed to scan transaction", zap.Error(err))
 			continue
 		}
+		
+		// Parse args JSON
+		if len(argsJSON) > 0 {
+			if err := json.Unmarshal(argsJSON, &tx.Args); err != nil {
+				s.logger.Warn("Failed to unmarshal args", zap.Error(err))
+				tx.Args = []string{}
+			}
+		} else {
+			tx.Args = []string{}
+		}
+		
 		tx.ID = idStr
 		txs = append(txs, tx)
 	}
@@ -94,7 +111,8 @@ func (s *Service) GetTransaction(ctx context.Context, txID string) (*Transaction
 	
 	err := s.db.QueryRow(ctx, `
 		SELECT id, tx_id, channel_name, chaincode_name, function_name, status, 
-		       COALESCE(block_number, 0), COALESCE(block_hash, ''), timestamp
+		       COALESCE(block_number, 0), COALESCE(block_hash, ''),
+		       COALESCE(timestamp, created_at) as timestamp
 		FROM transactions
 		WHERE tx_id = $1
 	`, txID).Scan(
@@ -108,6 +126,42 @@ func (s *Service) GetTransaction(ctx context.Context, txID string) (*Transaction
 	}
 	
 	tx.ID = idStr
+	return &tx, nil
+}
+
+// GetTransactionByNfcId retrieves a transaction by its NFC Tag ID
+func (s *Service) GetTransactionByNfcId(ctx context.Context, nfcId string) (*Transaction, error) {
+	var tx Transaction
+	var idStr string
+	var argsJSON []byte
+
+	err := s.db.QueryRow(ctx, `
+		SELECT id, tx_id, channel_name, chaincode_name, function_name, status, 
+		       COALESCE(block_number, 0), COALESCE(block_hash, ''),
+		       COALESCE(timestamp, created_at) as timestamp,
+		       COALESCE(args, '[]'::jsonb), COALESCE(nfc_tag_id, '')
+		FROM transactions
+		WHERE nfc_tag_id = $1
+		LIMIT 1
+	`, nfcId).Scan(
+		&idStr, &tx.TxID, &tx.ChannelName, &tx.ChaincodeName, &tx.FunctionName,
+		&tx.Status, &tx.BlockNumber, &tx.BlockHash, &tx.Timestamp, &argsJSON, &tx.NfcTagId,
+	)
+	if err != nil {
+		s.logger.Error("Failed to get transaction by NFC ID", zap.String("nfcId", nfcId), zap.Error(err))
+		return nil, err
+	}
+	tx.ID = idStr
+
+	if len(argsJSON) > 0 {
+		if err := json.Unmarshal(argsJSON, &tx.Args); err != nil {
+			s.logger.Warn("Failed to unmarshal args for transaction by NFC ID", zap.Error(err))
+			tx.Args = []string{}
+		}
+	} else {
+		tx.Args = []string{}
+	}
+
 	return &tx, nil
 }
 
@@ -158,10 +212,10 @@ func (s *Service) ListBatches(ctx context.Context, limit, offset int) ([]Batch, 
 
 	// Get transactions
 	rows, err := s.db.Query(ctx, `
-		SELECT tx_id, args, timestamp 
+		SELECT tx_id, args, COALESCE(timestamp, created_at) as timestamp 
 		FROM transactions 
 		WHERE function_name = 'CreateBatch'
-		ORDER BY timestamp DESC
+		ORDER BY COALESCE(timestamp, created_at) DESC
 		LIMIT $1 OFFSET $2
 	`, limit, offset)
 	if err != nil {
@@ -223,5 +277,38 @@ func (s *Service) SaveTransaction(ctx context.Context, tx *Transaction) error {
 		s.logger.Error("Failed to save transaction", zap.Error(err))
 		return err
 	}
+	return nil
+	return nil
+}
+
+// UpdateTransactionNfcId updates the NFC Tag ID for a transaction
+func (s *Service) UpdateTransactionNfcId(ctx context.Context, txId string, nfcId string) error {
+	result, err := s.db.Exec(ctx, `
+		UPDATE transactions 
+		SET nfc_tag_id = $1
+		WHERE tx_id = $2
+	`, nfcId, txId)
+	
+	if err != nil {
+		s.logger.Error("Failed to update transaction NFC ID", zap.String("txId", txId), zap.Error(err))
+		return err
+	}
+
+	rowsAffected := result.RowsAffected()
+	if rowsAffected == 0 {
+		// Try public schema if blockchain schema fails (fallback)
+		result, err = s.db.Exec(ctx, `
+			UPDATE transactions 
+			SET nfc_tag_id = $1
+			WHERE tx_id = $2
+		`, nfcId, txId)
+		if err != nil {
+			return err
+		}
+		if result.RowsAffected() == 0 {
+			return errors.New("transaction not found")
+		}
+	}
+
 	return nil
 }

@@ -26,6 +26,7 @@ import {
   Settings,
   Code,
   QrCode,
+  Radio,
 } from 'lucide-react'
 import { authService } from '@features/authentication/services/authService'
 import { useNavigate } from 'react-router-dom'
@@ -79,13 +80,18 @@ const navItems: NavItem[] = [
     icon: QrCode,
   },
   {
+    label: 'NFC Manager',
+    path: '/dashboard/nfc',
+    icon: Radio,
+  },
+  {
     label: 'Settings',
     path: '/settings',
     icon: Settings,
   },
 ]
 
-export const Header = ({}: HeaderProps) => {
+export const Header = ({ }: HeaderProps) => {
   const [showUserMenu, setShowUserMenu] = useState(false)
   const [showProfilePopup, setShowProfilePopup] = useState(false)
   const [userAvatar, setUserAvatar] = useState<string | null>(null)
@@ -111,11 +117,11 @@ export const Header = ({}: HeaderProps) => {
 
     const activeRef = navRefs.current[activePath]
     const container = containerRef.current
-    
+
     if (activeRef && container) {
       const containerRect = container.getBoundingClientRect()
       const activeRect = activeRef.getBoundingClientRect()
-      
+
       // ============================================
       // ĐIỀU CHỈNH KÍCH THƯỚC HIGHLIGHT Ở ĐÂY
       // ============================================
@@ -124,16 +130,16 @@ export const Header = ({}: HeaderProps) => {
       //   - Số âm: highlight hẹp hơn NavLink
       //   - Ví dụ: 16 = rộng thêm 8px mỗi bên
       const widthOffset = 0 // Thay đổi giá trị này để điều chỉnh độ rộng
-      
+
       // xOffset: Điều chỉnh vị trí ngang (px)
       //   - Số dương: dịch sang phải
       //   - Số âm: dịch sang trái
       const xOffset = -80 // Thay đổi giá trị này để điều chỉnh vị trí ngang
-      
+
       // Tính toán vị trí và kích thước
       const x = activeRect.left - containerRect.left - (widthOffset / 2) + xOffset
       const width = activeRect.width + widthOffset
-      
+
       setHighlightStyle({
         width,
         x,
@@ -160,7 +166,7 @@ export const Header = ({}: HeaderProps) => {
   // useEffect: Tính toán lại khi resize (với debounce)
   useEffect(() => {
     let resizeTimer: ReturnType<typeof setTimeout>
-    
+
     const handleResize = () => {
       clearTimeout(resizeTimer)
       // Debounce: Chờ 16ms (~1 frame) trước khi tính toán lại
@@ -170,7 +176,7 @@ export const Header = ({}: HeaderProps) => {
         updateHighlight()
       }, 16) // Thay đổi giá trị này nếu cần
     }
-    
+
     // Double requestAnimationFrame: Đảm bảo tính toán đúng thời điểm
     //   - Frame 1: Đợi layout hoàn tất
     //   - Frame 2: Tính toán vị trí chính xác
@@ -178,10 +184,10 @@ export const Header = ({}: HeaderProps) => {
     requestAnimationFrame(() => {
       requestAnimationFrame(updateHighlight)
     })
-    
+
     // passive: true = Tối ưu scroll performance
     window.addEventListener('resize', handleResize, { passive: true })
-    
+
     return () => {
       clearTimeout(resizeTimer)
       window.removeEventListener('resize', handleResize)
@@ -192,13 +198,13 @@ export const Header = ({}: HeaderProps) => {
   useEffect(() => {
     if (isAuthenticated) {
       fetchUserAvatar()
-      
+
       // Listen for avatar updates from ProfilePopup
       const handleAvatarUpdate = () => {
         fetchUserAvatar()
       }
       window.addEventListener('avatarUpdated', handleAvatarUpdate)
-      
+
       return () => {
         window.removeEventListener('avatarUpdated', handleAvatarUpdate)
       }
@@ -219,7 +225,7 @@ export const Header = ({}: HeaderProps) => {
       const response = await api.get<{ success: boolean; data: { avatar_url?: string; avatarUrl?: string } }>(
         API_ENDPOINTS.AUTH.PROFILE
       )
-      
+
       if (response.data.success && response.data.data) {
         // Check both avatar_url (snake_case from backend) and avatarUrl (camelCase)
         const avatarUrl = response.data.data.avatar_url || response.data.data.avatarUrl
@@ -350,7 +356,7 @@ export const Header = ({}: HeaderProps) => {
         {/* Navigation menu: Horizontal, centered - Only show when authenticated and not on /page */}
         {isAuthenticated && location.pathname !== '/page' && (
           <nav className="flex items-center justify-center border-t border-white/10 bg-black/40 backdrop-blur-xl">
-            <div 
+            <div
               ref={containerRef}
               className="relative flex items-center gap-5 px-20 py-2"
             >
@@ -366,7 +372,7 @@ export const Header = ({}: HeaderProps) => {
               */}
               <motion.span
                 className="absolute inset-y-2 rounded-2xl border border-white/35 bg-white/15 shadow-[0_10px_25px_rgba(15,15,15,0.6)] pointer-events-none"
-                style={{ 
+                style={{
                   // ============================================
                   // TỐI ƯU CSS PERFORMANCE - ĐIỀU CHỈNH Ở ĐÂY
                   // ============================================
@@ -374,21 +380,21 @@ export const Header = ({}: HeaderProps) => {
                   //   - Giúp browser tối ưu rendering trước
                   //   - Chỉ nên dùng khi thực sự cần (đã có sẵn)
                   willChange: 'transform, width, opacity',
-                  
+
                   // transformOrigin: Điểm gốc của transform
                   //   - 'left center': Transform từ bên trái (khuyến nghị)
                   transformOrigin: 'left center',
-                  
+
                   // backfaceVisibility: Ẩn mặt sau khi rotate (tối ưu rendering)
                   //   - 'hidden': Tối ưu tốt nhất (khuyến nghị)
                   backfaceVisibility: 'hidden',
                   WebkitBackfaceVisibility: 'hidden',
-                  
+
                   // perspective: Tạo không gian 3D (kích hoạt GPU acceleration)
                   //   - 1000: Giá trị tốt (khuyến nghị)
                   //   - Có thể tăng lên 2000 nếu cần
                   perspective: 2000,
-                  
+
                   // Có thể thêm các tối ưu khác:
                   // transform: 'translateZ(0)', // Force GPU acceleration
                   // isolation: 'isolate', // Tạo stacking context mới
@@ -410,22 +416,22 @@ export const Header = ({}: HeaderProps) => {
                     //   - 150-200: Cân bằng (khuyến nghị)
                     //   - 200-300: Nhanh, cứng (có thể giật)
                     stiffness: 100, // Giảm xuống 120-130 để mượt hơn
-                    
+
                     // damping: Độ giảm dao động (càng cao càng ít dao động)
                     //   - 20-25: Nhiều dao động (bouncy)
                     //   - 25-35: Cân bằng (khuyến nghị)
                     //   - 35-45: Ít dao động (mượt, ít bật)
                     damping: 25, // Tăng lên 35-40 để ít dao động hơn
-                    
+
                     // mass: Khối lượng (càng cao càng nặng, chậm hơn)
                     //   - 0.8-1.0: Nhẹ, nhanh
                     //   - 1.0-1.5: Cân bằng (khuyến nghị)
                     //   - 1.5-2.0: Nặng, chậm (mượt mà hơn)
                     mass: 1.9, // Tăng lên 1.5-1.8 để mượt hơn
-                    
+
                     // restDelta: Ngưỡng dừng (càng nhỏ càng chính xác)
                     restDelta: 0.001, // Giữ nguyên hoặc giảm xuống 0.001
-                    
+
                     // restSpeed: Tốc độ dừng (càng thấp càng mượt)
                     restSpeed: 0.3, // Giảm xuống 0.3-0.4 để mượt hơn
                   },
@@ -444,7 +450,7 @@ export const Header = ({}: HeaderProps) => {
                     //   - 0.12-0.18: Cân bằng
                     //   - 0.18-0.25: Chậm (có thể lag)
                     duration: 0.1, // Giữ nguyên hoặc giảm xuống 0.1
-                    
+
                     // ease: Hàm easing (càng mượt càng tốt)
                     //   - [0.25, 0.1, 0.25, 1]: Mượt mà (khuyến nghị)
                     //   - [0.4, 0, 0.2, 1]: Nhanh hơn
@@ -453,12 +459,12 @@ export const Header = ({}: HeaderProps) => {
                   },
                 }}
               />
-              
+
               {navItems.map((item) => {
                 const Icon = item.icon
-                const isActive = location.pathname === item.path || 
+                const isActive = location.pathname === item.path ||
                   (item.path !== '/' && location.pathname.startsWith(item.path))
-                
+
                 return (
                   <NavLink
                     key={item.path}
@@ -475,7 +481,7 @@ export const Header = ({}: HeaderProps) => {
                   >
                     {/* Glow effect on hover */}
                     <span className="absolute inset-0 bg-gradient-to-r from-transparent via-white/25 to-transparent opacity-0 group-hover:opacity-100 group-hover:animate-shimmer transition-opacity duration-300" />
-                    
+
                     <Icon className="h-4 w-4 relative z-10 group-hover:scale-110 transition-transform duration-300 text-white" />
                     <span className="relative z-10">{item.label}</span>
                     {item.badge && (
@@ -483,7 +489,7 @@ export const Header = ({}: HeaderProps) => {
                         {item.badge}
                       </span>
                     )}
-                    
+
                     {/* Shine effect */}
                     <span className="absolute inset-0 -translate-x-full group-hover:translate-x-full transition-transform duration-700 bg-gradient-to-r from-transparent via-white/60 to-transparent" />
                   </NavLink>

@@ -54,7 +54,7 @@ type ApprovalRequest struct {
 // CreateRequest creates a new approval request
 func (r *Repository) CreateRequest(ctx context.Context, req *ApprovalRequest) error {
 	query := `
-		INSERT INTO blockchain.approval_requests (
+		INSERT INTO approval_requests (
 			id, chaincode_version_id, operation, status, requested_by,
 			requested_at, expires_at, reason, metadata
 		) VALUES (
@@ -85,7 +85,7 @@ func (r *Repository) GetRequestByID(ctx context.Context, id uuid.UUID) (*Approva
 	query := `
 		SELECT id, chaincode_version_id, operation, status, requested_by,
 		       requested_at, expires_at, reason, metadata, created_at, updated_at
-		FROM blockchain.approval_requests
+		FROM approval_requests
 		WHERE id = $1
 	`
 
@@ -117,7 +117,7 @@ func (r *Repository) GetRequestByVersionAndOperation(ctx context.Context, versio
 	query := `
 		SELECT id, chaincode_version_id, operation, status, requested_by,
 		       requested_at, expires_at, reason, metadata, created_at, updated_at
-		FROM blockchain.approval_requests
+		FROM approval_requests
 		WHERE chaincode_version_id = $1 AND operation = $2
 		ORDER BY created_at DESC
 		LIMIT 1
@@ -151,7 +151,7 @@ func (r *Repository) ListRequests(ctx context.Context, filters *RequestFilters) 
 	query := `
 		SELECT id, chaincode_version_id, operation, status, requested_by,
 		       requested_at, expires_at, reason, metadata, created_at, updated_at
-		FROM blockchain.approval_requests
+		FROM approval_requests
 		WHERE 1=1
 	`
 
@@ -241,7 +241,7 @@ type ApprovalVote struct {
 // CreateVote creates a new approval vote
 func (r *Repository) CreateVote(ctx context.Context, vote *ApprovalVote) error {
 	query := `
-		INSERT INTO blockchain.approval_votes (
+		INSERT INTO approval_votes (
 			id, approval_request_id, approver_id, vote, comment, voted_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6
@@ -264,7 +264,7 @@ func (r *Repository) CreateVote(ctx context.Context, vote *ApprovalVote) error {
 func (r *Repository) GetVotesByRequest(ctx context.Context, requestID uuid.UUID) ([]*ApprovalVote, error) {
 	query := `
 		SELECT id, approval_request_id, approver_id, vote, comment, voted_at
-		FROM blockchain.approval_votes
+		FROM approval_votes
 		WHERE approval_request_id = $1
 		ORDER BY voted_at DESC
 	`
@@ -292,7 +292,7 @@ func (r *Repository) GetVotesByRequest(ctx context.Context, requestID uuid.UUID)
 
 // CheckApprovalStatus checks if an approval request is approved (using database function)
 func (r *Repository) CheckApprovalStatus(ctx context.Context, requestID uuid.UUID) (bool, error) {
-	query := `SELECT blockchain.check_approval_status($1)`
+	query := `SELECT check_approval_status($1)`
 
 	var isApproved bool
 	err := r.db.QueryRow(ctx, query, requestID).Scan(&isApproved)
@@ -320,7 +320,7 @@ func (r *Repository) GetPolicyByOperation(ctx context.Context, operation string)
 	query := `
 		SELECT id, operation, required_approvals, expiration_hours, is_active,
 		       conditions, created_at, updated_at
-		FROM blockchain.approval_policies
+		FROM approval_policies
 		WHERE operation = $1 AND is_active = TRUE
 	`
 
@@ -355,7 +355,7 @@ func (r *Repository) GetPolicyByOperation(ctx context.Context, operation string)
 // UpdateRequestStatus updates the status of an approval request
 func (r *Repository) UpdateRequestStatus(ctx context.Context, requestID uuid.UUID, status string) error {
 	query := `
-		UPDATE blockchain.approval_requests
+		UPDATE approval_requests
 		SET status = $1, updated_at = CURRENT_TIMESTAMP
 		WHERE id = $2
 	`

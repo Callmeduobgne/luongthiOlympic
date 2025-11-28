@@ -35,20 +35,20 @@ export const Layout = ({
   return (
     <div className="min-h-screen flex flex-col bg-black text-white relative">
       {/* Background Image */}
-      <div 
+      <div
         className="fixed inset-0 z-0"
         style={{
           backgroundImage: 'url(/images/315a80aeaefdcc33d8098190d4a21c9c.jpg)',
           backgroundSize: 'cover',
           backgroundPosition: 'center',
           backgroundRepeat: 'no-repeat',
-          backgroundAttachment: 'fixed',
+          backgroundAttachment: 'scroll',
         }}
       >
         {/* Dark overlay để text dễ đọc hơn */}
         <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       </div>
-      
+
       {/* Content */}
       <div className="relative z-10 flex flex-col min-h-screen">
         <Header />

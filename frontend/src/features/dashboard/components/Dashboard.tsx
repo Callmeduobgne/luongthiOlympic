@@ -306,7 +306,7 @@ export const Dashboard = () => {
                 </div>
                 <button
                   onClick={handleRealtimeToggle}
-                  className="px-4 py-1.5 text-sm rounded-full border border-white/20 bg-white/10 text-black hover:bg-white/30 transition backdrop-blur"
+                  className="px-4 py-1.5 text-sm rounded-full border border-white/20 bg-white/10 text-white hover:bg-white/30 transition backdrop-blur"
                   disabled={!wsConnected}
                 >
                   {connectionState ? 'Tạm dừng realtime' : 'Kích hoạt realtime'}
@@ -323,7 +323,7 @@ export const Dashboard = () => {
                     {stat.icon}
                     {stat.label}
                   </div>
-                  <p className="text-2xl font-semibold mt-2 text-black">{stat.value}</p>
+                  <p className="text-2xl font-semibold mt-2 text-white">{stat.value}</p>
                 </div>
               ))}
             </div>

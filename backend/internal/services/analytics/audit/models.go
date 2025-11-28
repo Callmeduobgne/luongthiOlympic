@@ -86,8 +86,8 @@ const (
 	ActionDeletePolicy    = "acl.delete_policy"
 	ActionAssignPermission = "acl.assign_permission"
 	ActionRevokePermission = "acl.revoke_permission"
-	ActionSubmitTransaction = "blockchain.submit_transaction"
-	ActionQueryChaincode  = "blockchain.query_chaincode"
-	ActionInvokeChaincode = "blockchain.invoke_chaincode"
+	ActionSubmitTransaction = "submit_transaction"
+	ActionQueryChaincode  = "query_chaincode"
+	ActionInvokeChaincode = "invoke_chaincode"
 )
 

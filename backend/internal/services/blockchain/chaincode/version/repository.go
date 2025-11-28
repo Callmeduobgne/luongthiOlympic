@@ -94,7 +94,7 @@ type VersionComparison struct {
 // CreateVersionTag creates a new version tag
 func (r *Repository) CreateVersionTag(ctx context.Context, tag *VersionTag) error {
 	query := `
-		INSERT INTO blockchain.version_tags (
+		INSERT INTO version_tags (
 			id, chaincode_version_id, tag_name, tag_type,
 			description, is_active, created_by
 		) VALUES (
@@ -120,7 +120,7 @@ func (r *Repository) GetVersionTagsByVersionID(ctx context.Context, versionID uu
 	query := `
 		SELECT id, chaincode_version_id, tag_name, tag_type,
 		       description, is_active, created_by, created_at, updated_at
-		FROM blockchain.version_tags
+		FROM version_tags
 		WHERE chaincode_version_id = $1
 		ORDER BY created_at DESC
 	`
@@ -152,8 +152,8 @@ func (r *Repository) GetVersionTagsByVersionID(ctx context.Context, versionID uu
 func (r *Repository) GetVersionByTag(ctx context.Context, chaincodeName, channelName, tagName string) (*uuid.UUID, error) {
 	query := `
 		SELECT cv.id
-		FROM blockchain.chaincode_versions cv
-		JOIN blockchain.version_tags vt ON cv.id = vt.chaincode_version_id
+		FROM chaincode_versions cv
+		JOIN version_tags vt ON cv.id = vt.chaincode_version_id
 		WHERE cv.name = $1 AND cv.channel_name = $2
 		  AND vt.tag_name = $3 AND vt.is_active = TRUE
 		  AND cv.deleted_at IS NULL
@@ -176,7 +176,7 @@ func (r *Repository) GetVersionByTag(ctx context.Context, chaincodeName, channel
 // CreateVersionDependency creates a new version dependency
 func (r *Repository) CreateVersionDependency(ctx context.Context, dep *VersionDependency) error {
 	query := `
-		INSERT INTO blockchain.version_dependencies (
+		INSERT INTO version_dependencies (
 			id, chaincode_version_id, dependency_name, dependency_version,
 			dependency_type, is_required, metadata
 		) VALUES (
@@ -207,7 +207,7 @@ func (r *Repository) GetVersionDependencies(ctx context.Context, versionID uuid.
 	query := `
 		SELECT id, chaincode_version_id, dependency_name, dependency_version,
 		       dependency_type, is_required, metadata, created_at
-		FROM blockchain.version_dependencies
+		FROM version_dependencies
 		WHERE chaincode_version_id = $1
 		ORDER BY dependency_type, dependency_name
 	`
@@ -244,7 +244,7 @@ func (r *Repository) GetVersionDependencies(ctx context.Context, versionID uuid.
 // CreateVersionReleaseNote creates a new release note
 func (r *Repository) CreateVersionReleaseNote(ctx context.Context, note *VersionReleaseNote) error {
 	query := `
-		INSERT INTO blockchain.version_release_notes (
+		INSERT INTO version_release_notes (
 			id, chaincode_version_id, title, content, release_type,
 			breaking_changes, new_features, bug_fixes, improvements, created_by
 		) VALUES (
@@ -271,7 +271,7 @@ func (r *Repository) GetVersionReleaseNote(ctx context.Context, versionID uuid.U
 		SELECT id, chaincode_version_id, title, content, release_type,
 		       breaking_changes, new_features, bug_fixes, improvements,
 		       created_by, created_at, updated_at
-		FROM blockchain.version_release_notes
+		FROM version_release_notes
 		WHERE chaincode_version_id = $1
 		ORDER BY created_at DESC
 		LIMIT 1
@@ -296,7 +296,7 @@ func (r *Repository) GetVersionReleaseNote(ctx context.Context, versionID uuid.U
 
 // CompareVersions compares two versions using database function
 func (r *Repository) CompareVersions(ctx context.Context, version1, version2 string) (int, error) {
-	query := `SELECT blockchain.compare_semantic_versions($1, $2)`
+	query := `SELECT compare_semantic_versions($1, $2)`
 
 	var result int
 	err := r.db.QueryRow(ctx, query, version1, version2).Scan(&result)
@@ -309,7 +309,7 @@ func (r *Repository) CompareVersions(ctx context.Context, version1, version2 str
 
 // GetLatestVersion gets the latest version for a chaincode
 func (r *Repository) GetLatestVersion(ctx context.Context, chaincodeName, channelName string) (*uuid.UUID, error) {
-	query := `SELECT blockchain.get_latest_version($1, $2)`
+	query := `SELECT get_latest_version($1, $2)`
 
 	var versionID uuid.UUID
 	err := r.db.QueryRow(ctx, query, chaincodeName, channelName).Scan(&versionID)
@@ -326,7 +326,7 @@ func (r *Repository) GetLatestVersion(ctx context.Context, chaincodeName, channe
 // CreateVersionComparison creates a version comparison record
 func (r *Repository) CreateVersionComparison(ctx context.Context, comp *VersionComparison) error {
 	query := `
-		INSERT INTO blockchain.version_comparisons (
+		INSERT INTO version_comparisons (
 			id, from_version_id, to_version_id, comparison_type,
 			changes_summary, breaking_changes_count, new_features_count,
 			bug_fixes_count, metadata
@@ -360,7 +360,7 @@ func (r *Repository) GetVersionComparisons(ctx context.Context, versionID uuid.U
 		SELECT id, from_version_id, to_version_id, comparison_type,
 		       changes_summary, breaking_changes_count, new_features_count,
 		       bug_fixes_count, metadata, created_at
-		FROM blockchain.version_comparisons
+		FROM version_comparisons
 		WHERE from_version_id = $1 OR to_version_id = $1
 		ORDER BY created_at DESC
 	`

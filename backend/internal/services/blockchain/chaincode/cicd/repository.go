@@ -117,7 +117,7 @@ type WebhookEvent struct {
 // CreatePipeline creates a new CI/CD pipeline
 func (r *Repository) CreatePipeline(ctx context.Context, pipeline *Pipeline) error {
 	query := `
-		INSERT INTO blockchain.cicd_pipelines (
+		INSERT INTO cicd_pipelines (
 			id, name, description, chaincode_name, channel_name,
 			source_type, source_repository, source_branch, source_path,
 			build_command, test_command, package_command,
@@ -153,7 +153,7 @@ func (r *Repository) GetPipelineByID(ctx context.Context, id uuid.UUID) (*Pipeli
 		       auto_deploy, deploy_on_tags, deploy_environment,
 		       webhook_url, webhook_secret, is_active, created_by,
 		       created_at, updated_at, deleted_at
-		FROM blockchain.cicd_pipelines
+		FROM cicd_pipelines
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -186,7 +186,7 @@ func (r *Repository) ListPipelines(ctx context.Context, filters *PipelineFilters
 		       auto_deploy, deploy_on_tags, deploy_environment,
 		       webhook_url, webhook_secret, is_active, created_by,
 		       created_at, updated_at, deleted_at
-		FROM blockchain.cicd_pipelines
+		FROM cicd_pipelines
 		WHERE deleted_at IS NULL
 	`
 
@@ -263,7 +263,7 @@ type PipelineFilters struct {
 // CreateExecution creates a new pipeline execution
 func (r *Repository) CreateExecution(ctx context.Context, exec *Execution) error {
 	query := `
-		INSERT INTO blockchain.cicd_executions (
+		INSERT INTO cicd_executions (
 			id, pipeline_id, trigger_type, trigger_source, triggered_by,
 			status, build_status, test_status, package_status, deploy_status,
 			metadata
@@ -294,7 +294,7 @@ func (r *Repository) CreateExecution(ctx context.Context, exec *Execution) error
 // UpdateExecutionStatus updates execution status
 func (r *Repository) UpdateExecutionStatus(ctx context.Context, id uuid.UUID, status string, stage *string, output *string, errorMsg *string, errorStage *string) error {
 	query := `
-		UPDATE blockchain.cicd_executions
+		UPDATE cicd_executions
 		SET status = $2,
 		    build_status = CASE WHEN $3 = 'build' THEN $2 ELSE build_status END,
 		    test_status = CASE WHEN $3 = 'test' THEN $2 ELSE test_status END,
@@ -326,7 +326,7 @@ func (r *Repository) GetExecutionByID(ctx context.Context, id uuid.UUID) (*Execu
 		       build_output, test_output, package_path, deployment_id,
 		       error_message, error_stage, metadata,
 		       created_at, updated_at
-		FROM blockchain.cicd_executions
+		FROM cicd_executions
 		WHERE id = $1
 	`
 
@@ -365,7 +365,7 @@ func (r *Repository) ListExecutions(ctx context.Context, filters *ExecutionFilte
 		       build_output, test_output, package_path, deployment_id,
 		       error_message, error_stage, metadata,
 		       created_at, updated_at
-		FROM blockchain.cicd_executions
+		FROM cicd_executions
 		WHERE 1=1
 	`
 
@@ -442,7 +442,7 @@ type ExecutionFilters struct {
 // CreateArtifact creates a new artifact
 func (r *Repository) CreateArtifact(ctx context.Context, artifact *Artifact) error {
 	query := `
-		INSERT INTO blockchain.cicd_artifacts (
+		INSERT INTO cicd_artifacts (
 			id, execution_id, artifact_type, artifact_path,
 			artifact_size, mime_type, metadata
 		) VALUES (
@@ -473,7 +473,7 @@ func (r *Repository) GetArtifactsByExecutionID(ctx context.Context, executionID 
 	query := `
 		SELECT id, execution_id, artifact_type, artifact_path,
 		       artifact_size, mime_type, metadata, created_at
-		FROM blockchain.cicd_artifacts
+		FROM cicd_artifacts
 		WHERE execution_id = $1
 		ORDER BY created_at DESC
 	`
@@ -510,7 +510,7 @@ func (r *Repository) GetArtifactsByExecutionID(ctx context.Context, executionID 
 // CreateWebhookEvent creates a new webhook event
 func (r *Repository) CreateWebhookEvent(ctx context.Context, event *WebhookEvent) error {
 	query := `
-		INSERT INTO blockchain.cicd_webhook_events (
+		INSERT INTO cicd_webhook_events (
 			id, pipeline_id, event_type, payload, signature
 		) VALUES (
 			$1, $2, $3, $4, $5
@@ -539,7 +539,7 @@ func (r *Repository) GetUnprocessedWebhookEvents(ctx context.Context, limit int)
 	query := `
 		SELECT id, pipeline_id, event_type, payload, signature,
 		       processed, execution_id, error_message, created_at, processed_at
-		FROM blockchain.cicd_webhook_events
+		FROM cicd_webhook_events
 		WHERE processed = FALSE
 		ORDER BY created_at ASC
 		LIMIT $1
@@ -577,7 +577,7 @@ func (r *Repository) GetUnprocessedWebhookEvents(ctx context.Context, limit int)
 // MarkWebhookEventProcessed marks a webhook event as processed
 func (r *Repository) MarkWebhookEventProcessed(ctx context.Context, eventID uuid.UUID, executionID *uuid.UUID, errorMsg *string) error {
 	query := `
-		UPDATE blockchain.cicd_webhook_events
+		UPDATE cicd_webhook_events
 		SET processed = TRUE, execution_id = $2, error_message = $3, processed_at = CURRENT_TIMESTAMP
 		WHERE id = $1
 	`
@@ -592,7 +592,7 @@ func (r *Repository) MarkWebhookEventProcessed(ctx context.Context, eventID uuid
 
 // UpdateExecutionPackagePath updates the package path for an execution
 func (r *Repository) UpdateExecutionPackagePath(ctx context.Context, executionID uuid.UUID, packagePath string) error {
-	query := `UPDATE blockchain.cicd_executions SET package_path = $1 WHERE id = $2`
+	query := `UPDATE cicd_executions SET package_path = $1 WHERE id = $2`
 
 	_, err := r.db.Exec(ctx, query, packagePath, executionID)
 	if err != nil {

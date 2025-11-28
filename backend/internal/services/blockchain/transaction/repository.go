@@ -38,8 +38,8 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // CreateTransaction creates a new transaction record
 func (r *Repository) CreateTransaction(ctx context.Context, tx *Transaction) error {
 	query := `
-		INSERT INTO blockchain.transactions 
-		(id, tx_id, user_id, channel_name, chaincode_name, function_name, args, transient_data, status, submitted_at)
+		INSERT INTO transactions 
+		(id, tx_id, user_id, channel_name, chaincode_name, function_name, args, transient_data, status, timestamp)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 	`
 
@@ -65,9 +65,8 @@ func (r *Repository) CreateTransaction(ctx context.Context, tx *Transaction) err
 // Note: Database schema only has: status, block_number, error_message, committed_at
 func (r *Repository) UpdateTransactionStatus(ctx context.Context, id uuid.UUID, status string, blockNumber *uint64, txIndex *uint32, responseData string, errorMsg *string, validationCode *int32) error {
 	query := `
-		UPDATE blockchain.transactions 
+		UPDATE transactions 
 		SET status = $2, block_number = $3, error_message = $4,
-		    committed_at = CASE WHEN $2 IN ('committed', 'failed', 'timeout') THEN NOW() ELSE committed_at END,
 		    updated_at = NOW()
 		WHERE id = $1
 	`
@@ -86,19 +85,20 @@ func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*Tra
 	query := `
 		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
 		       args, transient_data, status, block_number, 
-		       error_message, submitted_at, committed_at
-		FROM blockchain.transactions 
+		       error_message, timestamp, updated_at
+		FROM transactions 
 		WHERE id = $1
 	`
 
-	var committedAt, submittedAt sql.NullTime
+
+	var timestamp, updatedAt sql.NullTime
 	var argsJSON, payloadJSON sql.NullString
 	var blockNumber sql.NullInt64
 	err := r.db.QueryRow(ctx, query, id).Scan(
 		&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
 		&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
 		&blockNumber, &tx.ErrorMessage,
-		&submittedAt, &committedAt,
+		&timestamp, &updatedAt,
 	)
 	
 	// Handle NULL block_number
@@ -111,9 +111,9 @@ func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*Tra
 		return nil, fmt.Errorf("failed to get transaction: %w", err)
 	}
 	
-	// Handle NULL submitted_at - use zero time if NULL
-	if submittedAt.Valid {
-		tx.SubmittedAt = submittedAt.Time
+	// Handle NULL timestamp - use zero time if NULL
+	if timestamp.Valid {
+		tx.SubmittedAt = timestamp.Time
 	} else {
 		tx.SubmittedAt = time.Time{}
 	}
@@ -134,13 +134,9 @@ func (r *Repository) GetTransactionByID(ctx context.Context, id uuid.UUID) (*Tra
 		}
 	}
 	
-	// Handle NULL committed_at
-	if committedAt.Valid {
-		tx.CompletedAt = &committedAt.Time
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transaction: %w", err)
+	// Handle NULL updated_at as completed time
+	if updatedAt.Valid {
+		tx.CompletedAt = &updatedAt.Time
 	}
 
 	return tx, nil
@@ -152,19 +148,20 @@ func (r *Repository) GetTransactionByTxID(ctx context.Context, txID string) (*Tr
 	query := `
 		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
 		       args, transient_data, status, block_number, 
-		       error_message, submitted_at, committed_at
-		FROM blockchain.transactions 
+		       error_message, timestamp, updated_at
+		FROM transactions 
 		WHERE tx_id = $1
 	`
 
-	var committedAt, submittedAt sql.NullTime
+
+	var timestamp, updatedAt sql.NullTime
 	var argsJSON, payloadJSON sql.NullString
 	var blockNumber sql.NullInt64
 	err := r.db.QueryRow(ctx, query, txID).Scan(
 		&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
 		&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
 		&blockNumber, &tx.ErrorMessage,
-		&submittedAt, &committedAt,
+		&timestamp, &updatedAt,
 	)
 	
 	// Handle NULL block_number
@@ -177,9 +174,9 @@ func (r *Repository) GetTransactionByTxID(ctx context.Context, txID string) (*Tr
 		return nil, fmt.Errorf("failed to get transaction by tx_id: %w", err)
 	}
 	
-	// Handle NULL submitted_at - use zero time if NULL
-	if submittedAt.Valid {
-		tx.SubmittedAt = submittedAt.Time
+	// Handle NULL timestamp - use zero time if NULL
+	if timestamp.Valid {
+		tx.SubmittedAt = timestamp.Time
 	} else {
 		tx.SubmittedAt = time.Time{}
 	}
@@ -200,13 +197,9 @@ func (r *Repository) GetTransactionByTxID(ctx context.Context, txID string) (*Tr
 		}
 	}
 	
-	// Handle NULL committed_at
-	if committedAt.Valid {
-		tx.CompletedAt = &committedAt.Time
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get transaction by tx_id: %w", err)
+	// Handle NULL updated_at as completed time
+	if updatedAt.Valid {
+		tx.CompletedAt = &updatedAt.Time
 	}
 
 	return tx, nil
@@ -217,8 +210,8 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 	query := `
 		SELECT id, tx_id, user_id, channel_name, chaincode_name, function_name, 
 		       args, transient_data, status, block_number, 
-		       error_message, submitted_at, committed_at
-		FROM blockchain.transactions
+		       error_message, timestamp, updated_at
+		FROM transactions
 		WHERE 1=1
 	`
 
@@ -283,7 +276,7 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 	var transactions []*Transaction
 	for rows.Next() {
 		tx := &Transaction{}
-		var committedAt, submittedAt sql.NullTime
+		var timestamp, updatedAt sql.NullTime
 		var argsJSON, payloadJSON sql.NullString
 		var blockNumber sql.NullInt64
 		
@@ -291,7 +284,7 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 			&tx.ID, &tx.TxID, &tx.UserID, &tx.ChannelID, &tx.ChaincodeID,
 			&tx.FunctionName, &argsJSON, &payloadJSON, &tx.Status,
 			&blockNumber, &tx.ErrorMessage,
-			&submittedAt, &committedAt,
+			&timestamp, &updatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan transaction: %w", err)
@@ -303,9 +296,9 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 			tx.BlockNumber = &blockNum
 		}
 		
-		// Handle NULL submitted_at - use zero time if NULL
-		if submittedAt.Valid {
-			tx.SubmittedAt = submittedAt.Time
+		// Handle NULL timestamp - use zero time if NULL
+		if timestamp.Valid {
+			tx.SubmittedAt = timestamp.Time
 		} else {
 			// If NULL, use zero time (will be serialized as "0001-01-01T00:00:00Z" in JSON)
 			tx.SubmittedAt = time.Time{}
@@ -327,9 +320,9 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 			}
 		}
 		
-		// Handle NULL committed_at
-		if committedAt.Valid {
-			tx.CompletedAt = &committedAt.Time
+		// Handle NULL updated_at as completed time
+		if updatedAt.Valid {
+			tx.CompletedAt = &updatedAt.Time
 		}
 		transactions = append(transactions, tx)
 	}
@@ -341,7 +334,7 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 // Note: Database schema uses: previous_status, new_status, error_message, metadata, created_at
 func (r *Repository) AddStatusHistory(ctx context.Context, history *TransactionStatusHistory) error {
 	query := `
-		INSERT INTO blockchain.transaction_status_history 
+		INSERT INTO transaction_status_history 
 		(id, transaction_id, new_status, error_message, created_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`
@@ -361,7 +354,7 @@ func (r *Repository) AddStatusHistory(ctx context.Context, history *TransactionS
 func (r *Repository) GetStatusHistory(ctx context.Context, transactionID uuid.UUID) ([]*TransactionStatusHistory, error) {
 	query := `
 		SELECT id, transaction_id, new_status, error_message, created_at
-		FROM blockchain.transaction_status_history
+		FROM transaction_status_history
 		WHERE transaction_id = $1
 		ORDER BY created_at ASC
 	`

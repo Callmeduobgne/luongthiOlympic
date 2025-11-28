@@ -29,9 +29,21 @@ const getBaseURL = () => {
   return ''
 }
 
+// Production frontend URL for verification links
+// Use environment variable or default to production URL
+const getFrontendURL = () => {
+  // Check for environment variable first
+  if (import.meta.env.VITE_FRONTEND_URL) {
+    return import.meta.env.VITE_FRONTEND_URL
+  }
+  // Default production URL (IP:port)
+  return 'http://103.253.20.17:9999'
+}
+
 export const API_CONFIG = {
   BASE_URL: getBaseURL(),
   API_VERSION: '/api/v1',
+  FRONTEND_URL: getFrontendURL(),
 } as const
 
 export const API_ENDPOINTS = {

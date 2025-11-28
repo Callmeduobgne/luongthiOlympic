@@ -22,10 +22,11 @@ import { ExplorerPage } from '@features/explorer/pages/ExplorerPage'
 import { AnalyticsPage } from '@features/analytics/pages/AnalyticsPage'
 import { NetworkPage } from '@features/network/pages/NetworkPage'
 import { SettingsPage } from '@features/settings/pages/SettingsPage'
-import { TeaShopHomepage } from '@/pages/TeaShopHomepage'
+import { TeaShopHomepage } from '@/pages/TeaShopHomepageNew'
 import VerifyPackage from '@/pages/VerifyPackage'
 import VerifyHashPage from '@/pages/VerifyHashPage'
 import { QRCodeGeneratorPage } from '@features/dashboard/pages/QRCodeGeneratorPage'
+import { NFCManagerPage } from '@features/dashboard/pages/NFCManagerPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -94,6 +95,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <QRCodeGeneratorPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/dashboard/nfc',
+    element: (
+      <ProtectedRoute>
+        <NFCManagerPage />
       </ProtectedRoute>
     ),
   },

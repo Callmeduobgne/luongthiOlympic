@@ -65,7 +65,7 @@ type RollbackOperation struct {
 // CreateRollbackOperation creates a new rollback operation
 func (r *Repository) CreateRollbackOperation(ctx context.Context, op *RollbackOperation) error {
 	query := `
-		INSERT INTO blockchain.rollback_operations (
+		INSERT INTO rollback_operations (
 			id, chaincode_name, channel_name, from_version_id, to_version_id,
 			from_version, to_version, from_sequence, to_sequence,
 			status, reason, rollback_type, requested_by, metadata
@@ -101,7 +101,7 @@ func (r *Repository) GetRollbackOperationByID(ctx context.Context, id uuid.UUID)
 		       status, reason, rollback_type, started_at, completed_at, duration_ms,
 		       requested_by, executed_by, error_message, error_code, metadata,
 		       created_at, updated_at
-		FROM blockchain.rollback_operations
+		FROM rollback_operations
 		WHERE id = $1
 	`
 
@@ -133,7 +133,7 @@ func (r *Repository) GetRollbackOperationByID(ctx context.Context, id uuid.UUID)
 // UpdateRollbackStatus updates the status of a rollback operation
 func (r *Repository) UpdateRollbackStatus(ctx context.Context, id uuid.UUID, status string, errorMsg *string, errorCode *string, executedBy *uuid.UUID) error {
 	query := `
-		UPDATE blockchain.rollback_operations
+		UPDATE rollback_operations
 		SET status = $2, error_message = $3, error_code = $4, executed_by = $5,
 		    started_at = CASE WHEN $2 = 'in_progress' AND started_at IS NULL THEN CURRENT_TIMESTAMP ELSE started_at END,
 		    completed_at = CASE WHEN $2 IN ('completed', 'failed', 'cancelled') THEN CURRENT_TIMESTAMP ELSE completed_at END,
@@ -159,7 +159,7 @@ func (r *Repository) ListRollbackOperations(ctx context.Context, filters *Rollba
 		       status, reason, rollback_type, started_at, completed_at, duration_ms,
 		       requested_by, executed_by, error_message, error_code, metadata,
 		       created_at, updated_at
-		FROM blockchain.rollback_operations
+		FROM rollback_operations
 		WHERE 1=1
 	`
 
@@ -241,7 +241,7 @@ type RollbackFilters struct {
 
 // GetPreviousActiveVersion gets the previous active version for rollback
 func (r *Repository) GetPreviousActiveVersion(ctx context.Context, chaincodeName, channelName string, currentSequence int) (*uuid.UUID, error) {
-	query := `SELECT blockchain.get_previous_active_version($1, $2, $3)`
+	query := `SELECT get_previous_active_version($1, $2, $3)`
 
 	var versionID uuid.UUID
 	err := r.db.QueryRow(ctx, query, chaincodeName, channelName, currentSequence).Scan(&versionID)
@@ -257,7 +257,7 @@ func (r *Repository) GetPreviousActiveVersion(ctx context.Context, chaincodeName
 
 // IsRollbackSafe checks if rollback is safe (no pending operations)
 func (r *Repository) IsRollbackSafe(ctx context.Context, chaincodeName, channelName string) (bool, error) {
-	query := `SELECT blockchain.is_rollback_safe($1, $2)`
+	query := `SELECT is_rollback_safe($1, $2)`
 
 	var isSafe bool
 	err := r.db.QueryRow(ctx, query, chaincodeName, channelName).Scan(&isSafe)
@@ -271,7 +271,7 @@ func (r *Repository) IsRollbackSafe(ctx context.Context, chaincodeName, channelN
 // CreateRollbackHistory creates a rollback history entry
 func (r *Repository) CreateRollbackHistory(ctx context.Context, operationID, versionID uuid.UUID, operation, previousStatus, newStatus string, details json.RawMessage) error {
 	query := `
-		INSERT INTO blockchain.rollback_history (
+		INSERT INTO rollback_history (
 			rollback_operation_id, chaincode_version_id, operation,
 			previous_status, new_status, details
 		) VALUES (
@@ -297,7 +297,7 @@ func (r *Repository) GetRollbackHistory(ctx context.Context, operationID uuid.UU
 	query := `
 		SELECT id, rollback_operation_id, chaincode_version_id, operation,
 		       previous_status, new_status, details, created_at
-		FROM blockchain.rollback_history
+		FROM rollback_history
 		WHERE rollback_operation_id = $1
 		ORDER BY created_at DESC
 	`

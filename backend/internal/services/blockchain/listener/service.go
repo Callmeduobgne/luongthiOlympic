@@ -5,7 +5,6 @@ import (
 	"crypto/x509"
 	"fmt"
 	"os"
-	"path"
 	"time"
 
 	"github.com/hyperledger/fabric-gateway/pkg/client"

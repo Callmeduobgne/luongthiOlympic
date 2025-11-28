@@ -71,7 +71,7 @@ type ChaincodeVersion struct {
 // CreateVersion creates a new chaincode version record
 func (r *Repository) CreateVersion(ctx context.Context, version *ChaincodeVersion) error {
 	query := `
-		INSERT INTO blockchain.chaincode_versions (
+		INSERT INTO chaincode_versions (
 			id, name, version, sequence, package_id, label, path, package_path,
 			channel_name, install_status, approve_status, commit_status,
 			init_required, endorsement_plugin, validation_plugin, collections,
@@ -112,7 +112,7 @@ func (r *Repository) GetVersionByID(ctx context.Context, id uuid.UUID) (*Chainco
 		       installed_by, approved_by, committed_by,
 		       install_error, approve_error, commit_error,
 		       created_at, updated_at, deleted_at
-		FROM blockchain.chaincode_versions
+		FROM chaincode_versions
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -152,21 +152,21 @@ func (r *Repository) UpdateVersionStatus(ctx context.Context, id uuid.UUID, oper
 	switch operation {
 	case "install":
 		query = `
-			UPDATE blockchain.chaincode_versions
+			UPDATE chaincode_versions
 			SET install_status = $2, install_error = $3, installed_by = $4, installed_at = CURRENT_TIMESTAMP
 			WHERE id = $1
 		`
 		args = []interface{}{id, status, errorMsg, performedBy}
 	case "approve":
 		query = `
-			UPDATE blockchain.chaincode_versions
+			UPDATE chaincode_versions
 			SET approve_status = $2, approve_error = $3, approved_by = $4, approved_at = CURRENT_TIMESTAMP
 			WHERE id = $1
 		`
 		args = []interface{}{id, status, errorMsg, performedBy}
 	case "commit":
 		query = `
-			UPDATE blockchain.chaincode_versions
+			UPDATE chaincode_versions
 			SET commit_status = $2, commit_error = $3, committed_by = $4, committed_at = CURRENT_TIMESTAMP
 			WHERE id = $1
 		`
@@ -193,7 +193,7 @@ func (r *Repository) ListVersions(ctx context.Context, filters *VersionFilters) 
 		       installed_by, approved_by, committed_by,
 		       install_error, approve_error, commit_error,
 		       created_at, updated_at, deleted_at
-		FROM blockchain.chaincode_versions
+		FROM chaincode_versions
 		WHERE deleted_at IS NULL
 	`
 
@@ -297,7 +297,7 @@ type DeploymentLog struct {
 // CreateDeploymentLog creates a new deployment log
 func (r *Repository) CreateDeploymentLog(ctx context.Context, log *DeploymentLog) error {
 	query := `
-		INSERT INTO blockchain.deployment_logs (
+		INSERT INTO deployment_logs (
 			id, chaincode_version_id, operation, status, request_data, response_data,
 			error_message, error_code, started_at, completed_at, duration_ms,
 			performed_by, ip_address, user_agent
@@ -332,7 +332,7 @@ func (r *Repository) CreateDeploymentLog(ctx context.Context, log *DeploymentLog
 // UpdateDeploymentLog updates a deployment log
 func (r *Repository) UpdateDeploymentLog(ctx context.Context, id uuid.UUID, status string, responseData json.RawMessage, errorMsg *string, errorCode *string) error {
 	query := `
-		UPDATE blockchain.deployment_logs
+		UPDATE deployment_logs
 		SET status = $2, response_data = $3, error_message = $4, error_code = $5,
 		    completed_at = CURRENT_TIMESTAMP
 		WHERE id = $1
@@ -357,7 +357,7 @@ func (r *Repository) GetDeploymentLogs(ctx context.Context, versionID uuid.UUID,
 		SELECT id, chaincode_version_id, operation, status, request_data, response_data,
 		       error_message, error_code, started_at, completed_at, duration_ms,
 		       performed_by, ip_address, user_agent, created_at
-		FROM blockchain.deployment_logs
+		FROM deployment_logs
 		WHERE chaincode_version_id = $1
 		ORDER BY created_at DESC
 		LIMIT $2
@@ -425,7 +425,7 @@ func (r *Repository) GetActiveChaincodes(ctx context.Context, channelName *strin
 		       package_id, init_required, endorsement_plugin, validation_plugin,
 		       collections, is_active, activated_at, deactivated_at, metadata,
 		       created_at, updated_at
-		FROM blockchain.active_chaincodes
+		FROM active_chaincodes
 		WHERE is_active = TRUE
 	`
 

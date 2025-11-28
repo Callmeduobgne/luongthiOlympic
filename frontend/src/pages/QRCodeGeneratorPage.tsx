@@ -215,7 +215,7 @@ export const QRCodeGeneratorPage = () => {
                                                 Verification URL
                                             </label>
                                             <p className="text-sm text-green-400 mt-1 font-mono break-all">
-                                                {window.location.origin}/verify/hash?hash={selectedTxId}
+                                                {import.meta.env.VITE_FRONTEND_URL || 'http://103.253.20.17:9999'}/verify/hash?hash={selectedTxId}
                                             </p>
                                         </div>
                                     </div>
@@ -224,8 +224,9 @@ export const QRCodeGeneratorPage = () => {
                                         variant="primary"
                                         className="w-full"
                                         onClick={() => {
+                                            const frontendUrl = import.meta.env.VITE_FRONTEND_URL || 'http://103.253.20.17:9999'
                                             window.open(
-                                                `/verify/hash?hash=${selectedTxId}`,
+                                                `${frontendUrl}/verify/hash?hash=${selectedTxId}`,
                                                 '_blank'
                                             )
                                         }}
