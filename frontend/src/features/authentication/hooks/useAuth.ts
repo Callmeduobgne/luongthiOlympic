@@ -35,6 +35,14 @@ export const useAuth = (): UseAuthReturn => {
     const checkAuth = async () => {
       const token = authService.getAccessToken()
       if (token) {
+        // Start token refresh manager if token exists
+        const tokenExpiresAt = localStorage.getItem('tokenExpiresAt')
+        if (tokenExpiresAt) {
+          const { tokenRefreshManager } = await import('@shared/utils/tokenRefresh')
+          tokenRefreshManager.setTokenExpiryTime(tokenExpiresAt)
+          tokenRefreshManager.start()
+        }
+
         // TODO: Fetch user profile from API
         // For now, just set authenticated state
         setIsLoading(false)

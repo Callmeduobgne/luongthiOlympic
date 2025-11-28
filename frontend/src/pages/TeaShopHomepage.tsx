@@ -15,10 +15,11 @@
  */
 
 import { Link, useNavigate } from 'react-router-dom'
-import { Shield, Leaf, Award, QrCode, ChevronRight, CheckCircle, Hash, Radio, ArrowLeft } from 'lucide-react'
+import { Shield, Leaf, Award, QrCode, ChevronRight, CheckCircle, Hash, Radio, ArrowLeft, Camera, X } from 'lucide-react'
 import { HomeHeader } from '@shared/components/layout/HomeHeader'
 import { authService } from '@features/authentication/services/authService'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
 // NOTE: Removed transactionExplorerService import - hash verification now queries from blockchain network, not database
 
 type VerificationMethod = 'qr' | 'hash' | 'nfc' | null
@@ -31,9 +32,105 @@ export function TeaShopHomepage() {
     const [qrCode, setQrCode] = useState('')
     const [hash, setHash] = useState('')
     const [nfcTag, setNfcTag] = useState('')
+    const [isScanning, setIsScanning] = useState(false)
+    const [cameraError, setCameraError] = useState<string | null>(null)
+    const qrCodeScannerRef = useRef<Html5Qrcode | null>(null)
+    const scannerContainerRef = useRef<HTMLDivElement>(null)
 
     // NOTE: Removed fetching transactions from database
     // Hash verification now queries directly from blockchain network, not from database
+
+    // QR Code Scanner functions
+    const startQRScanner = async () => {
+        const containerId = 'qr-reader-container'
+        
+        // Wait for container to be rendered
+        await new Promise(resolve => setTimeout(resolve, 100))
+        const container = document.getElementById(containerId)
+        if (!container) {
+            console.error('Scanner container not found')
+            setCameraError('Không tìm thấy container scanner')
+            return
+        }
+
+        try {
+            setCameraError(null)
+            const scanner = new Html5Qrcode(containerId)
+            qrCodeScannerRef.current = scanner
+
+            await scanner.start(
+                { facingMode: 'environment' }, // Use back camera on mobile
+                {
+                    fps: 10,
+                    qrbox: { width: 250, height: 250 },
+                },
+                (decodedText) => {
+                    // QR code scanned successfully
+                    // Extract package ID from URL if it's a verification URL
+                    let packageId = decodedText
+                    if (decodedText.includes('/verify/packages/')) {
+                        packageId = decodedText.split('/verify/packages/')[1]?.split('?')[0] || decodedText
+                    } else if (decodedText.includes('hash=')) {
+                        packageId = decodedText.split('hash=')[1]?.split('&')[0] || decodedText
+                    }
+                    setQrCode(packageId)
+                    stopQRScanner()
+                    // Auto-submit after a short delay
+                    setTimeout(() => {
+                        if (packageId.trim()) {
+                            navigate(`/verify/packages/${packageId.trim()}`)
+                            setShowVerificationModal(false)
+                        }
+                    }, 500)
+                },
+                (_errorMessage) => {
+                    // Ignore scanning errors (they're frequent during scanning)
+                }
+            )
+            setIsScanning(true)
+        } catch (error) {
+            console.error('Failed to start camera:', error)
+            const errorMsg = error instanceof Error ? error.message : 'Unknown error'
+            if (errorMsg.includes('NotAllowedError') || errorMsg.includes('Permission denied')) {
+                setCameraError('Quyền truy cập camera bị từ chối. Vui lòng cho phép truy cập camera trong cài đặt trình duyệt.')
+            } else if (errorMsg.includes('NotFoundError') || errorMsg.includes('No camera')) {
+                setCameraError('Không tìm thấy camera. Vui lòng kiểm tra thiết bị của bạn.')
+            } else {
+                setCameraError('Không thể truy cập camera. Vui lòng thử lại.')
+            }
+            setIsScanning(false)
+        }
+    }
+
+    const stopQRScanner = async () => {
+        if (qrCodeScannerRef.current) {
+            try {
+                await qrCodeScannerRef.current.stop()
+                await qrCodeScannerRef.current.clear()
+            } catch (error) {
+                console.error('Error stopping scanner:', error)
+            }
+            qrCodeScannerRef.current = null
+        }
+        setIsScanning(false)
+        setCameraError(null)
+    }
+
+    // Cleanup scanner when component unmounts or method changes
+    useEffect(() => {
+        return () => {
+            if (qrCodeScannerRef.current) {
+                stopQRScanner()
+            }
+        }
+    }, [])
+
+    // Stop scanner when method changes or modal closes
+    useEffect(() => {
+        if (!showVerificationModal || selectedMethod !== 'qr') {
+            stopQRScanner()
+        }
+    }, [showVerificationModal, selectedMethod])
 
     // Parallax scroll effect - ảnh di chuyển từ trên xuống khi scroll
     useEffect(() => {
@@ -634,18 +731,74 @@ export function TeaShopHomepage() {
                                 {/* Input Form */}
                                 <div className="space-y-4">
                                     {selectedMethod === 'qr' && (
-                                        <div>
+                                        <div className="space-y-3">
                                             <label className="block text-sm font-medium text-gray-700 mb-2">
                                                 Mã QR / Package ID
                                             </label>
-                                            <input
-                                                type="text"
-                                                value={qrCode}
-                                                onChange={(e) => setQrCode(e.target.value)}
-                                                placeholder="Nhập mã QR hoặc Package ID"
-                                                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-600 focus:outline-none transition-colors text-gray-900"
-                                                autoFocus
-                                            />
+                                            <div className="flex gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={qrCode}
+                                                    onChange={(e) => setQrCode(e.target.value)}
+                                                    placeholder="Nhập mã QR hoặc Package ID"
+                                                    className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-green-600 focus:outline-none transition-colors text-gray-900"
+                                                    autoFocus
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        if (isScanning) {
+                                                            stopQRScanner()
+                                                        } else {
+                                                            startQRScanner()
+                                                        }
+                                                    }}
+                                                    className={`px-4 py-3 rounded-xl border-2 transition-colors flex items-center gap-2 ${
+                                                        isScanning
+                                                            ? 'bg-red-500 text-white border-red-600 hover:bg-red-600'
+                                                            : 'bg-green-500 text-white border-green-600 hover:bg-green-600'
+                                                    }`}
+                                                >
+                                                    {isScanning ? (
+                                                        <>
+                                                            <X className="w-5 h-5" />
+                                                            <span className="hidden sm:inline">Tắt</span>
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <Camera className="w-5 h-5" />
+                                                            <span className="hidden sm:inline">Quét</span>
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+
+                                            {/* Camera Scanner */}
+                                            {isScanning && (
+                                                <div className="relative">
+                                                    <div
+                                                        id="qr-reader-container"
+                                                        ref={scannerContainerRef}
+                                                        className="w-full rounded-xl overflow-hidden border-2 border-green-500"
+                                                        style={{ minHeight: '300px' }}
+                                                    />
+                                                    <div className="absolute top-2 right-2 bg-black/70 text-white px-3 py-1 rounded-lg text-sm z-10">
+                                                        Đưa QR code vào khung
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {cameraError && (
+                                                <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+                                                    {cameraError}
+                                                </div>
+                                            )}
+
+                                            {!isScanning && (
+                                                <p className="text-xs text-gray-500">
+                                                    Nhấn nút "Quét" để bật camera và quét QR code tự động
+                                                </p>
+                                            )}
                                         </div>
                                     )}
 

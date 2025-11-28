@@ -16,6 +16,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -27,12 +28,17 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/ibn-network/backend/internal/config"
 	authHandler "github.com/ibn-network/backend/internal/handlers/auth"
+	dashboardHandler "github.com/ibn-network/backend/internal/handlers/dashboard"
+	metricsHandler "github.com/ibn-network/backend/internal/handlers/metrics"
 	teatraceHandler "github.com/ibn-network/backend/internal/handlers/teatrace"
 	"github.com/ibn-network/backend/internal/infrastructure/cache"
 	"github.com/ibn-network/backend/internal/infrastructure/database"
 	"github.com/ibn-network/backend/internal/infrastructure/gateway"
 	authMiddleware "github.com/ibn-network/backend/internal/middleware"
+	"github.com/ibn-network/backend/internal/services/analytics/metrics"
 	"github.com/ibn-network/backend/internal/services/auth"
+	blockchainDB "github.com/ibn-network/backend/internal/services/blockchain/db"
+	blockchainInfo "github.com/ibn-network/backend/internal/services/blockchain/info"
 	teatraceService "github.com/ibn-network/backend/internal/services/teatrace"
 	"github.com/ibn-network/backend/internal/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -111,14 +117,27 @@ func main() {
 
 	// Initialize services
 	authService := auth.NewService(authRepo, multiCache, &cfg.JWT, logger)
-	teatraceService := teatraceService.NewService(gatewayClient, logger)
+	metricsService := metrics.NewService(logger)
+	teatraceService := teatraceService.NewService(gatewayClient, metricsService, logger)
+	
+	// Initialize blockchain info service via Gateway
+	blockchainInfoService := blockchainInfo.NewServiceViaGateway(
+		gatewayClient,
+		"ibnchannel", // TODO: Get from config
+		logger,
+	)
+
+	// Initialize blockchain DB service
+	blockchainDBService := blockchainDB.NewService(dbPool.Primary(), logger)
 
 	// Initialize handlers
 	authHandlerInstance := authHandler.NewHandler(authService, logger)
 	teatraceHandlerInstance := teatraceHandler.NewHandler(teatraceService, logger)
+	metricsHandlerInstance := metricsHandler.NewHandler(metricsService, logger)
+	dashboardHandlerInstance := dashboardHandler.NewHandler(metricsService, blockchainInfoService, authService, logger)
 
 	// Setup routes
-	router := setupRoutes(cfg, authHandlerInstance, teatraceHandlerInstance, authService, logger)
+	router := setupRoutes(cfg, authHandlerInstance, teatraceHandlerInstance, metricsHandlerInstance, dashboardHandlerInstance, blockchainInfoService, blockchainDBService, authService, logger)
 
 	// Create HTTP server
 	addr := cfg.Server.Address()
@@ -161,6 +180,10 @@ func setupRoutes(
 	cfg *config.Config,
 	authHandler *authHandler.Handler,
 	teatraceHandler *teatraceHandler.Handler,
+	metricsHandler *metricsHandler.Handler,
+	dashboardHandler *dashboardHandler.Handler,
+	blockchainInfoService *blockchainInfo.ServiceViaGateway,
+	blockchainDBService *blockchainDB.Service,
 	authService *auth.Service,
 	logger *zap.Logger,
 ) *chi.Mux {
@@ -245,9 +268,163 @@ func setupRoutes(
 		// Tea Traceability routes (public)
 		r.Route("/teatrace", func(r chi.Router) {
 			r.Post("/verify-by-hash", teatraceHandler.VerifyByHash)
+			
+			// Batches endpoint (real data from DB)
+			r.Get("/batches", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				
+				limit := 50
+				offset := 0
+				
+				batches, total, err := blockchainDBService.ListBatches(r.Context(), limit, offset)
+				if err != nil {
+					logger.Error("Failed to list batches", zap.Error(err))
+					http.Error(w, "Failed to list batches", http.StatusInternalServerError)
+					return
+				}
+
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"data":    batches,
+					"meta": map[string]interface{}{
+						"total": total,
+						"limit": limit,
+						"offset": offset,
+					},
+				})
+			})
 		})
 
-		// TODO: Add other routes (blockchain, chaincode, metrics, etc.)
+		// Metrics routes (public - for monitoring)
+		r.Route("/metrics", func(r chi.Router) {
+			r.Get("/", metricsHandler.GetMetrics)
+			r.Get("/snapshot", metricsHandler.GetSnapshot)
+			r.Get("/aggregations", metricsHandler.GetAggregations)
+			r.Get("/by-name", metricsHandler.GetMetricByName)
+		})
+
+		// Dashboard WebSocket (requires authentication via WebSocket message)
+		r.Route("/dashboard", func(r chi.Router) {
+			r.Get("/ws/{channel}", dashboardHandler.HandleWebSocket)
+		})
+
+		// Blocks routes (stub - returns empty array for now)
+		r.Route("/blocks", func(r chi.Router) {
+			r.Get("/{channel}", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode([]interface{}{})
+			})
+		})
+
+		// Blockchain routes (query real Fabric data)
+		r.Route("/blockchain", func(r chi.Router) {
+			r.Get("/channel/info", func(w http.ResponseWriter, r *http.Request) {
+				// Try to get real channel info from Fabric
+				channelInfo, err := blockchainInfoService.GetChannelInfo(r.Context())
+				
+				// Get latest block info from DB as fallback/supplement
+				dbBlockInfo, dbErr := blockchainDBService.GetLatestBlock(r.Context())
+				
+				w.Header().Set("Content-Type", "application/json")
+				
+				if err != nil {
+					// Fallback to DB info if Fabric fails
+					height := uint64(0)
+					currentHash := ""
+					if dbErr == nil {
+						height = dbBlockInfo.Height
+						currentHash = dbBlockInfo.CurrentBlockHash
+					}
+
+					logger.Debug("Using fallback channel info", zap.Error(err))
+					json.NewEncoder(w).Encode(map[string]interface{}{
+						"channel":           "ibnchannel",
+						"height":            height,
+						"currentBlockHash":  currentHash,
+						"previousBlockHash": "",
+						"channels":          []string{"ibnchannel"},
+						"chaincodes":        []string{"teatrace"},
+						"peers":             4,
+						"orderers":          1,
+					})
+					return
+				}
+				
+				// Use DB block height if available and greater than 0 (since qscc might return 0 if unavailable)
+				height := uint64(0) // qscc returns raw bytes, hard to parse here without protobuf
+				currentHash := ""
+				if dbErr == nil && dbBlockInfo.Height > 0 {
+					height = dbBlockInfo.Height
+					currentHash = dbBlockInfo.CurrentBlockHash
+				}
+				
+				// Return real channel info combined with DB info
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"channel":           channelInfo.ChannelID,
+					"height":            height,
+					"currentBlockHash":  currentHash,
+					"previousBlockHash": "",
+					"channels":          []string{channelInfo.ChannelID},
+					"chaincodes":        []string{"teatrace"},
+					"peers":             4,
+					"orderers":          1,
+					"rawInfo":           channelInfo.RawInfo,
+					"rawInfoSize":       channelInfo.Size,
+				})
+			})
+
+			// Transactions endpoint (real data from DB)
+			r.Get("/transactions", func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				
+				// Parse pagination
+				limit := 20
+				offset := 0
+				// TODO: Parse query params
+				
+				txs, total, err := blockchainDBService.ListTransactions(r.Context(), limit, offset)
+				if err != nil {
+					http.Error(w, "Failed to list transactions", http.StatusInternalServerError)
+					return
+				}
+
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"success": true,
+					"data":    txs,
+					"meta": map[string]interface{}{
+						"total": total,
+						"limit": limit,
+						"offset": offset,
+					},
+				})
+			})
+
+			// Transaction Receipt endpoint
+			r.Get("/transactions/{txId}/receipt", func(w http.ResponseWriter, r *http.Request) {
+				txId := chi.URLParam(r, "txId")
+				
+				tx, err := blockchainDBService.GetTransaction(r.Context(), txId)
+				if err != nil {
+					http.Error(w, "Transaction not found", http.StatusNotFound)
+					return
+				}
+				
+				w.Header().Set("Content-Type", "application/json")
+				
+				// Construct receipt
+				receipt := map[string]interface{}{
+					"transactionId": tx.TxID,
+					"status":        tx.Status,
+					"blockNumber":   tx.BlockNumber,
+					"blockHash":     tx.BlockHash,
+					"timestamp":     tx.Timestamp,
+					"validationCode": 0, // Valid
+					"events":        []interface{}{}, // No events stored in DB yet
+				}
+				
+				json.NewEncoder(w).Encode(receipt)
+			})
+		})
 	})
 
 	return r

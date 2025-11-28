@@ -19,26 +19,39 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"time"
+
 	"github.com/ibn-network/backend/internal/infrastructure/gateway"
+	"github.com/ibn-network/backend/internal/services/analytics/metrics"
 	"go.uber.org/zap"
 )
 
 // Service handles Tea Traceability operations
 type Service struct {
 	gatewayClient *gateway.Client
+	metrics       *metrics.Service
 	logger        *zap.Logger
 }
 
 // NewService creates a new Tea Traceability service
-func NewService(gatewayClient *gateway.Client, logger *zap.Logger) *Service {
+func NewService(gatewayClient *gateway.Client, metrics *metrics.Service, logger *zap.Logger) *Service {
 	return &Service{
 		gatewayClient: gatewayClient,
+		metrics:       metrics,
 		logger:        logger,
 	}
 }
 
 // VerifyByHash verifies an entity by its hash via Gateway
 func (s *Service) VerifyByHash(ctx context.Context, hash string) (map[string]interface{}, error) {
+	start := time.Now()
+	var err error
+	
+	// Record metric on exit
+	defer func() {
+		s.metrics.RecordBlockchainTransaction("verify_by_hash", time.Since(start), err == nil)
+	}()
+
 	reqBody := map[string]string{
 		"hash": hash,
 	}
@@ -55,12 +68,13 @@ func (s *Service) VerifyByHash(ctx context.Context, hash string) (map[string]int
 		Error   interface{}            `json:"error"`
 	}
 
-	if err := json.Unmarshal(respBody, &apiResp); err != nil {
+	if err = json.Unmarshal(respBody, &apiResp); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal response: %w", err)
 	}
 
 	if !apiResp.Success {
-		return nil, fmt.Errorf("verification failed: %v", apiResp.Error)
+		err = fmt.Errorf("verification failed: %v", apiResp.Error)
+		return nil, err
 	}
 
 	return apiResp.Data, nil

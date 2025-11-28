@@ -31,10 +31,11 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        // Trong Docker: proxy tới backend container (ibn-backend:8080)
-        // Trong local dev: proxy trực tiếp tới backend (localhost:9090)
-        // Sử dụng env variable VITE_API_BASE_URL từ docker-compose hoặc mặc định
-        target: process.env.VITE_API_BASE_URL || 'http://localhost:9090',
+        // Frontend dev và prod đều dùng relative URL trong code
+        // Dev: Vite proxy forward /api/* tới backend (localhost:9900)
+        // Prod: Nginx proxy forward /api/* tới backend (ibn-backend:8080)
+        // Cả 2 đều hoạt động giống nhau, chỉ khác proxy layer
+        target: process.env.VITE_API_BASE_URL || 'http://localhost:9900',
         changeOrigin: true,
         ws: true, // Enable WebSocket for both HMR and API WebSocket endpoints
         rewrite: (path) => path, // Keep original path (including query parameters)
@@ -46,25 +47,14 @@ export default defineConfig({
           proxy.on('proxyReqWs', (proxyReq, req) => {
             // CRITICAL: Ensure query parameters are preserved in WebSocket URL
             // Vite proxy should preserve query params automatically, but we ensure it here
-            const url = new URL(req.url || '', `http://${req.headers.host || 'localhost'}`)
-            
+
             // Ensure WebSocket upgrade headers are set correctly
             proxyReq.setHeader('Upgrade', req.headers.upgrade || 'websocket')
             proxyReq.setHeader('Connection', req.headers.connection || 'Upgrade')
-            
+
             // Forward Authorization header if present (fallback for token)
             if (req.headers.authorization) {
               proxyReq.setHeader('Authorization', req.headers.authorization)
-            }
-            
-            // Log WebSocket connection attempt for debugging (dev only)
-            if (process.env.NODE_ENV === 'development') {
-              console.log('[Vite Proxy] WebSocket connection:', {
-                url: req.url,
-                path: url.pathname,
-                query: url.search,
-                token: url.searchParams.get('token') ? 'present' : 'missing',
-              })
             }
           })
         },

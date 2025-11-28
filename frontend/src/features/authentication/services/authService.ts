@@ -40,7 +40,7 @@ export const authService = {
       email: credentials.email,
       password: credentials.password,
     }
-    
+
     // Dev mode: Log request details
     if (import.meta.env.DEV) {
       console.log('📤 [DEV] API Request:', {
@@ -50,7 +50,7 @@ export const authService = {
         baseURL: import.meta.env.VITE_API_BASE_URL || 'relative',
       })
     }
-    
+
     try {
       const response = await api.post<AuthResponse | WrappedAuthResponse>(
         API_ENDPOINTS.AUTH.LOGIN,
@@ -59,7 +59,7 @@ export const authService = {
       const payload = response.data
       const wrappedPayload = isWrappedResponse(payload) ? payload : null
       const directPayload = wrappedPayload ? null : (payload as AuthResponse)
-      
+
       // Dev mode: Log response
       if (import.meta.env.DEV) {
         console.log('📥 [DEV] API Response:', {
@@ -71,7 +71,7 @@ export const authService = {
           payload: payload, // Log full payload for debugging
         })
       }
-      
+
       // API Gateway wraps response in { success: true, data: {...} }
       // Handle both wrapped and unwrapped responses
       // Backend returns snake_case (access_token) but frontend expects camelCase (accessToken)
@@ -96,7 +96,7 @@ export const authService = {
         }
         throw new Error('Invalid response format from server')
       }
-      
+
       // Validate that we have required fields
       if (!authData.accessToken) {
         if (import.meta.env.DEV) {
@@ -104,7 +104,7 @@ export const authService = {
         }
         throw new Error('Invalid response format: missing accessToken')
       }
-      
+
       // Store tokens
       if (authData.accessToken) {
         localStorage.setItem('accessToken', authData.accessToken)
@@ -116,9 +116,23 @@ export const authService = {
           console.error('❌ [DEV] No accessToken in response:', authData)
         }
       }
-      
+
       if (authData.refreshToken) {
         localStorage.setItem('refreshToken', authData.refreshToken)
+      }
+
+      // Store token expiry time and start auto-refresh
+      if (authData.expiresAt) {
+        localStorage.setItem('tokenExpiresAt', authData.expiresAt)
+
+        // Start token refresh manager
+        const { tokenRefreshManager } = await import('@shared/utils/tokenRefresh')
+        tokenRefreshManager.setTokenExpiryTime(authData.expiresAt)
+        tokenRefreshManager.start()
+
+        if (import.meta.env.DEV) {
+          console.log('✅ [DEV] Token expiry time stored and auto-refresh started')
+        }
       }
 
       return authData
@@ -151,14 +165,16 @@ export const authService = {
       throw new Error('No refresh token available')
     }
 
-    const response = await api.post<{ success: boolean; data: { accessToken: string } } | { accessToken: string }>(
+    const response = await api.post<{ success: boolean; data: { accessToken: string; expiresAt?: string } } | { accessToken: string; expiresAt?: string }>(
       API_ENDPOINTS.AUTH.REFRESH,
       { refreshToken }
     )
 
-    const accessToken = isWrappedResponse(response.data)
-      ? response.data.data?.accessToken
-      : (response.data as { accessToken?: string }).accessToken
+    const data = isWrappedResponse(response.data)
+      ? response.data.data
+      : (response.data as { accessToken?: string; expiresAt?: string })
+
+    const accessToken = data?.accessToken
 
     if (!accessToken) {
       throw new Error('No access token returned from refresh endpoint')
@@ -166,6 +182,16 @@ export const authService = {
 
     if (accessToken) {
       localStorage.setItem('accessToken', accessToken)
+
+      // Store new expiry time if provided
+      if (data.expiresAt) {
+        localStorage.setItem('tokenExpiresAt', data.expiresAt)
+
+        // Update token refresh manager
+        import('@shared/utils/tokenRefresh').then(({ tokenRefreshManager }) => {
+          tokenRefreshManager.setTokenExpiryTime(data.expiresAt!)
+        })
+      }
     }
     return accessToken
   },
@@ -173,6 +199,14 @@ export const authService = {
   logout() {
     localStorage.removeItem('accessToken')
     localStorage.removeItem('refreshToken')
+    localStorage.removeItem('tokenExpiresAt')
+
+    // Stop token refresh manager
+    import('@shared/utils/tokenRefresh').then(({ tokenRefreshManager }) => {
+      tokenRefreshManager.stop()
+      tokenRefreshManager.clearTokenExpiryTime()
+    })
+
     window.location.href = '/login'
   },
 

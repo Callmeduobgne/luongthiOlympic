@@ -14,30 +14,19 @@
  * limitations under the License.
  */
 
-// Frontend → Backend (port 9090) → Gateway (port 8080/8085) → Fabric
+// Frontend → Backend → Gateway → Fabric
 // Frontend KHÔNG gọi Gateway trực tiếp, chỉ gọi Backend
 // Backend sẽ tự gọi Gateway khi cần blockchain operations
+//
+// CẤU HÌNH THỐNG NHẤT:
+// - Dev mode: Dùng relative URL, Vite proxy sẽ forward /api/* tới backend
+// - Prod mode: Dùng relative URL, Nginx proxy sẽ forward /api/* tới backend
+// - Cả 2 đều dùng cùng cách: relative URL ('') → proxy tự động xử lý
 const getBaseURL = () => {
-  const envUrl = import.meta.env.VITE_API_BASE_URL
-  // Nếu có env variable và là backend URL, dùng nó
-  if (envUrl && envUrl.includes('localhost:9090')) {
-    return envUrl // Trong dev, có thể dùng trực tiếp backend URL
-  }
-  // Nếu có env variable và là container name (Docker), dùng relative URL
-  if (envUrl && (envUrl.includes('api-gateway-nginx') || envUrl.includes('backend'))) {
-    return '' // Dùng relative URL, Vite proxy sẽ forward
-  }
-  // Nếu có env variable khác, dùng nó
-  if (envUrl && !envUrl.includes('localhost')) {
-    return envUrl
-  }
-  // Production: use relative URL (nginx proxy)
-  if (import.meta.env.PROD) {
-    return ''
-  }
-  // Development: ALWAYS use relative URL để Vite proxy xử lý
-  // Vite proxy đã được cấu hình trỏ tới backend (localhost:9090)
-  return '' // Dùng Vite proxy → Backend (9090)
+  // LUÔN dùng relative URL để proxy (Vite dev hoặc Nginx prod) xử lý
+  // Điều này đảm bảo dev và prod hoạt động giống hệt nhau
+  // Chỉ khác nhau ở proxy layer (Vite vs Nginx), không khác ở code
+  return ''
 }
 
 export const API_CONFIG = {

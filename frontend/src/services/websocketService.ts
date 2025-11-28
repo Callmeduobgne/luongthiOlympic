@@ -127,13 +127,15 @@ class WebSocketService {
           authTimeout = window.setTimeout(() => {
             if (!isAuthenticated) {
               console.error('❌ Authentication timeout - no response from server')
-              ws.close(1008, 'Authentication timeout')
+              // Use code 3000 (custom code range 3000-4999)
+              ws.close(3000, 'Authentication timeout')
             }
           }, 5000)
 
         } catch (err) {
           console.error('❌ Failed to send auth message:', err)
-          ws.close(1008, 'Failed to send auth message')
+          // Use code 3001 for auth send failure
+          ws.close(3001, 'Failed to send auth message')
         }
       }
 
@@ -228,18 +230,6 @@ class WebSocketService {
           // Reset reconnect attempts on manual disconnect
           this.reconnectAttempts = 0
           this.reconnectDelay = 1000
-        }
-      }
-
-      // Handle messages
-      ws.onmessage = (event) => {
-        try {
-          const data: DashboardUpdate = JSON.parse(event.data as string)
-          // Trigger custom event
-          const customEvent = new CustomEvent('dashboard:update', { detail: data })
-          window.dispatchEvent(customEvent)
-        } catch (err) {
-          console.error('Failed to parse WebSocket message', err)
         }
       }
     })

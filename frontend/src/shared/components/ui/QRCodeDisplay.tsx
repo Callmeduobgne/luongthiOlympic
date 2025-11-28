@@ -14,13 +14,13 @@
  * limitations under the License.
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Download, Loader2, AlertCircle } from 'lucide-react'
+import { Download, Loader2 } from 'lucide-react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Button } from './Button'
 import { Spinner } from './Spinner'
 import { qrcodeApi } from '@features/supply-chain/services/qrcodeApi'
-import api from '@shared/utils/api'
 import { API_CONFIG } from '@shared/config/api.config'
 
 interface QRCodeDisplayProps {
@@ -42,62 +42,102 @@ export const QRCodeDisplay = ({
 }: QRCodeDisplayProps) => {
   const [downloadLoading, setDownloadLoading] = useState(false)
 
-  // Determine which API to use
+  // Generate verification URL for QR code
+  const verificationUrl = useMemo(() => {
+    if (packageId) {
+      return `${window.location.origin}/verify/packages/${packageId}`
+    }
+    if (txId) {
+      return `${window.location.origin}/verify/hash?hash=${txId}`
+    }
+    if (batchId) {
+      return `${window.location.origin}/verify/batches/${batchId}`
+    }
+    return ''
+  }, [packageId, txId, batchId])
+
+  // For package and batch, try to get QR code from backend (with fallback to client-side)
   const qrCodeQuery = useQuery({
-    queryKey: ['qrcode', batchId || packageId || txId],
+    queryKey: ['qrcode', batchId || packageId],
     queryFn: async () => {
       if (batchId) {
-        return await qrcodeApi.getBatchQRCodeBase64(batchId)
+        try {
+          return await qrcodeApi.getBatchQRCodeBase64(batchId)
+        } catch {
+          return null // Fallback to client-side
+        }
       }
       if (packageId) {
-        return await qrcodeApi.getPackageQRCodeBase64(packageId)
+        try {
+          return await qrcodeApi.getPackageQRCodeBase64(packageId)
+        } catch {
+          return null // Fallback to client-side
+        }
       }
-      // For txId, we use PNG URL directly (backend auto-detects)
-      if (txId) {
-        return qrcodeApi.getTransactionQRCodeUrl(txId)
-      }
-      throw new Error('batchId, packageId, or txId is required')
+      return null
     },
-    enabled: !!(batchId || packageId || txId),
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
+    enabled: !!(batchId || packageId) && !txId, // Only for batch/package, not transaction
+    staleTime: 5 * 60 * 1000,
+    retry: false, // Don't retry if backend endpoint doesn't exist
   })
 
-  const handleDownload = async () => {
-    if (!qrCodeQuery.data) return
+  // Use backend QR code if available, otherwise use client-side generation
+  const useBackendQR = !!(qrCodeQuery.data && (batchId || packageId))
 
+  const handleDownload = async () => {
     setDownloadLoading(true)
     try {
-      let imageUrl: string
-      let filename: string
-
-      if (batchId) {
-        imageUrl = qrcodeApi.getBatchQRCodeUrl(batchId)
-        filename = `qr-batch-${batchId}.png`
-      } else if (packageId) {
-        imageUrl = qrcodeApi.getPackageQRCodeUrl(packageId)
-        filename = `qr-package-${packageId}.png`
-      } else if (txId) {
-        imageUrl = qrcodeApi.getTransactionQRCodeUrl(txId)
-        filename = `qr-transaction-${txId}.png`
-      } else {
-        return
+      // If using backend QR code, download from data URI
+      if (useBackendQR && qrCodeQuery.data) {
+        const isDataUri = typeof qrCodeQuery.data === 'string' && qrCodeQuery.data.startsWith('data:image')
+        if (isDataUri) {
+          const link = document.createElement('a')
+          link.href = qrCodeQuery.data
+          link.download = `qr-${batchId || packageId || txId}.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          return
+        }
       }
 
-      // Fetch image with auth token
-      const response = await api.get(imageUrl, {
-        responseType: 'blob',
-      })
+      // For client-side QR code (SVG), convert to PNG
+      const svgElement = document.querySelector(`#qrcode-${batchId || packageId || txId}`) as SVGSVGElement
+      if (!svgElement) return
 
-      // Create blob URL and download
-      const blob = new Blob([response.data], { type: 'image/png' })
-      const url = window.URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(url)
+      // Create canvas and draw SVG
+      const canvas = document.createElement('canvas')
+      canvas.width = size
+      canvas.height = size
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
+
+      // Convert SVG to image
+      const svgData = new XMLSerializer().serializeToString(svgElement)
+      const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' })
+      const url = URL.createObjectURL(svgBlob)
+
+      const img = new Image()
+      img.onload = () => {
+        ctx.fillStyle = 'white'
+        ctx.fillRect(0, 0, canvas.width, canvas.height)
+        ctx.drawImage(img, 0, 0, size, size)
+        URL.revokeObjectURL(url)
+
+        // Download as PNG
+        canvas.toBlob((blob) => {
+          if (!blob) return
+          const downloadUrl = window.URL.createObjectURL(blob)
+          const link = document.createElement('a')
+          link.href = downloadUrl
+          link.download = `qr-${batchId || packageId || txId}.png`
+          document.body.appendChild(link)
+          link.click()
+          document.body.removeChild(link)
+          window.URL.revokeObjectURL(downloadUrl)
+        }, 'image/png')
+      }
+      img.src = url
     } catch (error) {
       console.error('Failed to download QR code:', error)
     } finally {
@@ -105,7 +145,12 @@ export const QRCodeDisplay = ({
     }
   }
 
-  if (qrCodeQuery.isLoading) {
+  if (!verificationUrl) {
+    return null
+  }
+
+  // Show loading only if trying to fetch from backend
+  if (qrCodeQuery.isLoading && (batchId || packageId)) {
     return (
       <div
         className={`flex flex-col items-center justify-center p-8 border border-white/15 rounded-2xl bg-black/40 ${className}`}
@@ -117,46 +162,67 @@ export const QRCodeDisplay = ({
     )
   }
 
-  if (qrCodeQuery.isError) {
+  // Use backend QR code if available, otherwise generate client-side
+  if (useBackendQR && qrCodeQuery.data) {
+    const isDataUri = typeof qrCodeQuery.data === 'string' && qrCodeQuery.data.startsWith('data:image')
+    const isFullUrl = typeof qrCodeQuery.data === 'string' && (qrCodeQuery.data.startsWith('http://') || qrCodeQuery.data.startsWith('https://'))
+    const imageSrc = isDataUri
+      ? qrCodeQuery.data
+      : isFullUrl
+      ? qrCodeQuery.data
+      : `${API_CONFIG.BASE_URL}${qrCodeQuery.data}`
+
     return (
-      <div
-        className={`flex flex-col items-center justify-center p-8 border border-red-500/30 rounded-2xl bg-red-500/10 ${className}`}
-        style={{ width: size, height: size }}
-      >
-        <AlertCircle className="h-12 w-12 text-red-500 mb-4" />
-        <p className="text-sm text-red-400 text-center">
-          Failed to load QR code
-        </p>
-        <p className="text-xs text-gray-400 mt-2 text-center">
-          {qrCodeQuery.error instanceof Error
-            ? qrCodeQuery.error.message
-            : 'Unknown error'}
-        </p>
+      <div className={`flex flex-col items-center ${className}`}>
+        <div
+          className="relative border-4 border-white/20 rounded-2xl bg-white p-4 shadow-lg"
+          style={{ width: size, height: size }}
+        >
+          <img
+            src={imageSrc}
+            alt={`QR Code for ${batchId || packageId || txId}`}
+            className="w-full h-full object-contain"
+            style={{ imageRendering: 'crisp-edges' }}
+          />
+        </div>
+        {showDownload && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={handleDownload}
+            disabled={downloadLoading}
+            className="mt-4 w-full"
+          >
+            {downloadLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Downloading...
+              </>
+            ) : (
+              <>
+                <Download className="h-4 w-4 mr-2" />
+                Download QR Code
+              </>
+            )}
+          </Button>
+        )}
       </div>
     )
   }
 
-  if (!qrCodeQuery.data) {
-    return null
-  }
-
-  // Check if data is base64 data URI or URL
-  const isDataUri = qrCodeQuery.data.startsWith('data:image')
-  const imageSrc = isDataUri
-    ? qrCodeQuery.data
-    : `${API_CONFIG.BASE_URL}${qrCodeQuery.data}`
-
+  // Client-side QR code generation
   return (
     <div className={`flex flex-col items-center ${className}`}>
       <div
-        className="relative border-4 border-white/20 rounded-2xl bg-white p-4 shadow-lg"
+        className="relative border-4 border-white/20 rounded-2xl bg-white p-4 shadow-lg flex items-center justify-center"
         style={{ width: size, height: size }}
       >
-        <img
-          src={imageSrc}
-          alt={`QR Code for ${batchId || packageId || txId}`}
-          className="w-full h-full object-contain"
-          style={{ imageRendering: 'crisp-edges' }}
+        <QRCodeSVG
+          id={`qrcode-${batchId || packageId || txId}`}
+          value={verificationUrl}
+          size={size - 32} // Account for padding
+          level="H" // High error correction
+          includeMargin={false}
         />
       </div>
 

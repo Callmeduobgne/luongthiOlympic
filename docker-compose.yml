@@ -564,7 +564,7 @@ services:
       FABRIC_CHANNEL_NAME: ibnchannel
       JWT_SECRET: ibn_ea6d5c1d4f7b438b91ce2f3a7d8cbe95
       JWT_ISSUER: ibn-api-gateway
-      JWT_ACCESS_TTL: 15m
+      JWT_ACCESS_TTL: 1h
       JWT_REFRESH_TTL: 168h
       OPA_ENABLED: 'true'
       OPA_BASE_URL: http://opa:8181

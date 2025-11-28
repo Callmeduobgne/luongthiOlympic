@@ -40,7 +40,7 @@ export const QRCodeGeneratorPage = () => {
     const { data: transactions, isLoading, error } = useQuery<Transaction[]>({
         queryKey: ['transactions'],
         queryFn: async () => {
-            const response = await api.get('/api/v1/transactions?limit=50')
+            const response = await api.get('/api/v1/blockchain/transactions?limit=50')
             return response.data.data || []
         },
         refetchInterval: 10000, // Refresh every 10 seconds
@@ -120,8 +120,8 @@ export const QRCodeGeneratorPage = () => {
                                         key={tx.tx_id}
                                         onClick={() => setSelectedTxId(tx.tx_id)}
                                         className={`p-4 rounded-xl border transition-all cursor-pointer ${selectedTxId === tx.tx_id
-                                                ? 'bg-green-500/20 border-green-500/50'
-                                                : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                            ? 'bg-green-500/20 border-green-500/50'
+                                            : 'bg-white/5 border-white/10 hover:bg-white/10'
                                             }`}
                                     >
                                         <div className="flex items-start justify-between mb-2">

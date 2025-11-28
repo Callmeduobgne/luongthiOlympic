@@ -25,6 +25,7 @@ import {
   Network,
   Settings,
   Code,
+  QrCode,
 } from 'lucide-react'
 import { authService } from '@features/authentication/services/authService'
 import { useNavigate } from 'react-router-dom'
@@ -73,6 +74,11 @@ const navItems: NavItem[] = [
     icon: Network,
   },
   {
+    label: 'QR Code Generator',
+    path: '/qr-generator',
+    icon: QrCode,
+  },
+  {
     label: 'Settings',
     path: '/settings',
     icon: Settings,
@@ -99,7 +105,7 @@ export const Header = ({}: HeaderProps) => {
     )?.path
 
     if (!activePath) {
-      setHighlightStyle(prev => ({ ...prev, opacity: 0 }))
+      setHighlightStyle((prev: { width: number; x: number; opacity: number }) => ({ ...prev, opacity: 0 }))
       return
     }
 
@@ -456,7 +462,7 @@ export const Header = ({}: HeaderProps) => {
                 return (
                   <NavLink
                     key={item.path}
-                    ref={(el) => {
+                    ref={(el: HTMLAnchorElement | null) => {
                       navRefs.current[item.path] = el
                     }}
                     to={item.path}

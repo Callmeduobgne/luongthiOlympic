@@ -26,6 +26,7 @@ export interface Block {
   timestamp: string
   transactionCount: number
   transactions?: Transaction[]
+  channel?: string
 }
 
 export interface Transaction {
