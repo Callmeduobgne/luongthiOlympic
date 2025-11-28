@@ -178,6 +178,7 @@ type TransactionStatusHistory struct {
 
 type User struct {
 	ID           pgtype.UUID        `json:"id"`
+	Username     string             `json:"username"`
 	Email        string             `json:"email"`
 	PasswordHash string             `json:"password_hash"`
 	MspID        string             `json:"msp_id"`

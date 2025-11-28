@@ -70,21 +70,18 @@ export const dashboardService = {
     return response.data.data
   },
 
-  async getLatestBlocks(_channel: string, _limit: number = 10): Promise<Block[]> {
-    // Backend doesn't have list blocks endpoint, only get by number
-    // Use channel info to get latest block number, then fetch recent blocks
+  async getLatestBlocks(channel: string, limit: number = 10): Promise<Block[]> {
     try {
-      await api.get(API_ENDPOINTS.BLOCKS.CHANNEL_INFO)
-      // Channel info contains blockchain info, but we need to parse it
-      // For now, return empty array to avoid errors
-      // TODO: Implement logic to fetch blocks by number from latest to latest-limit
-      if (import.meta.env.DEV) {
-        console.warn('[DEV] getLatestBlocks: Backend only supports GetBlockByNumber, not ListBlocks')
-      }
-      return []
+      const response = await api.get<{ success: boolean; data: { blocks: Block[] } }>(
+        API_ENDPOINTS.BLOCKS.LIST(channel),
+        {
+          params: { limit },
+        }
+      )
+      return response.data.data.blocks || []
     } catch (error) {
       if (import.meta.env.DEV) {
-        console.error('[DEV] Failed to get channel info for blocks:', error)
+        console.error('[DEV] Failed to get latest blocks:', error)
       }
       return []
     }
@@ -103,21 +100,21 @@ export const dashboardService = {
         // Extract channels (array of channel objects)
         const channels = Array.isArray(data.channels) ? data.channels : []
         const channelNames = channels.map((ch: any) => ch.name || ch).filter(Boolean)
-        
+
         // Extract chaincodes from all channels (flatten and unique)
         const allChaincodes: string[] = channels
           .flatMap((ch: any) => Array.isArray(ch.chaincodes) ? ch.chaincodes : [])
           .filter((cc: any): cc is string => cc && typeof cc === 'string')
         const uniqueChaincodes = Array.from(new Set(allChaincodes))
-        
+
         // Extract peers (array of peer objects)
         const peers = Array.isArray(data.peers) ? data.peers : []
         const peerCount = peers.length
-        
+
         // Extract orderers (array of orderer objects)
         const orderers = Array.isArray(data.orderers) ? data.orderers : []
         const ordererCount = orderers.length
-        
+
         return {
           name: data.name || 'IBN Network',
           version: data.version || '',

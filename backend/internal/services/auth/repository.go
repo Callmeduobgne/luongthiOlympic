@@ -37,14 +37,14 @@ func NewRepository(db *pgxpool.Pool) *Repository {
 // CreateUser creates a new user
 func (r *Repository) CreateUser(ctx context.Context, user *User) error {
 	query := `
-		INSERT INTO auth.users (id, email, username, password_hash, full_name, role, msp_id, is_active, email_verified)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		INSERT INTO public.users (id, email, username, password_hash, role, msp_id, is_active)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING created_at, updated_at
 	`
 
 	err := r.db.QueryRow(ctx, query,
-		user.ID, user.Email, user.Username, user.PasswordHash, user.FullName, user.Role,
-		user.MSPID, user.IsActive, user.EmailVerified,
+		user.ID, user.Email, user.Username, user.PasswordHash, user.Role,
+		user.MSPID, user.IsActive,
 	).Scan(&user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
@@ -58,8 +58,8 @@ func (r *Repository) CreateUser(ctx context.Context, user *User) error {
 func (r *Repository) IsUsernameTaken(ctx context.Context, username string) (bool, error) {
 	query := `
 		SELECT 1
-		FROM auth.users
-		WHERE username = $1 AND deleted_at IS NULL
+		FROM public.users
+		WHERE username = $1
 		LIMIT 1
 	`
 
@@ -78,17 +78,17 @@ func (r *Repository) IsUsernameTaken(ctx context.Context, username string) (bool
 // GetUserByEmail retrieves a user by email
 func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, error) {
 	query := `
-		SELECT id, email, username, password_hash, full_name, role, msp_id, NULL::VARCHAR AS avatar_url, is_active, 
-		       email_verified, last_login_at, created_at, updated_at, deleted_at
-		FROM auth.users
-		WHERE email = $1 AND deleted_at IS NULL
+		SELECT id, email, username, password_hash, role, msp_id, is_active, 
+		       NULL::TIMESTAMPTZ AS last_login_at, created_at, updated_at
+		FROM public.users
+		WHERE email = $1
 	`
 
 	user := &User{}
 	err := r.db.QueryRow(ctx, query, email).Scan(
-		&user.ID, &user.Email, &user.Username, &user.PasswordHash, &user.FullName, &user.Role,
-		&user.MSPID, &user.AvatarURL, &user.IsActive, &user.EmailVerified, &user.LastLoginAt,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&user.ID, &user.Email, &user.Username, &user.PasswordHash, &user.Role,
+		&user.MSPID, &user.IsActive, &user.LastLoginAt,
+		&user.CreatedAt, &user.UpdatedAt,
 	)
 
 	if err == pgx.ErrNoRows {
@@ -104,17 +104,17 @@ func (r *Repository) GetUserByEmail(ctx context.Context, email string) (*User, e
 // GetUserByID retrieves a user by ID
 func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, error) {
 	query := `
-		SELECT id, email, username, password_hash, full_name, role, msp_id, NULL::VARCHAR AS avatar_url, is_active,
-		       email_verified, last_login_at, created_at, updated_at, deleted_at
-		FROM auth.users
-		WHERE id = $1 AND deleted_at IS NULL
+		SELECT id, email, username, password_hash, role, msp_id, is_active,
+		       NULL::TIMESTAMPTZ AS last_login_at, created_at, updated_at
+		FROM public.users
+		WHERE id = $1
 	`
 
 	user := &User{}
 	err := r.db.QueryRow(ctx, query, id).Scan(
-		&user.ID, &user.Email, &user.Username, &user.PasswordHash, &user.FullName, &user.Role,
-		&user.MSPID, &user.AvatarURL, &user.IsActive, &user.EmailVerified, &user.LastLoginAt,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&user.ID, &user.Email, &user.Username, &user.PasswordHash, &user.Role,
+		&user.MSPID, &user.IsActive, &user.LastLoginAt,
+		&user.CreatedAt, &user.UpdatedAt,
 	)
 
 	if err == pgx.ErrNoRows {
@@ -130,12 +130,12 @@ func (r *Repository) GetUserByID(ctx context.Context, id uuid.UUID) (*User, erro
 // UpdateLastLogin updates user's last login time
 func (r *Repository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) error {
 	query := `
-		UPDATE auth.users
-		SET last_login_at = $1
-		WHERE id = $2
+		UPDATE public.users
+		SET updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
 	`
 
-	_, err := r.db.Exec(ctx, query, time.Now(), userID)
+	_, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update last login: %w", err)
 	}
@@ -146,7 +146,7 @@ func (r *Repository) UpdateLastLogin(ctx context.Context, userID uuid.UUID) erro
 // CreateAPIKey creates a new API key
 func (r *Repository) CreateAPIKey(ctx context.Context, apiKey *APIKey) error {
 	query := `
-		INSERT INTO auth.api_keys (id, user_id, key_hash, name, description, permissions, is_active, expires_at)
+		INSERT INTO public.api_keys (id, user_id, key_hash, name, description, permissions, is_active, expires_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		RETURNING created_at, updated_at
 	`
@@ -167,18 +167,20 @@ func (r *Repository) CreateAPIKey(ctx context.Context, apiKey *APIKey) error {
 func (r *Repository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIKey, error) {
 	query := `
 		SELECT id, user_id, key_hash, name, description, permissions, is_active,
-		       last_used_at, expires_at, created_at, updated_at, deleted_at
-		FROM auth.api_keys
-		WHERE key_hash = $1 AND deleted_at IS NULL
+		       last_used_at, expires_at, created_at, updated_at
+		FROM public.api_keys
+		WHERE key_hash = $1
 	`
 
 	apiKey := &APIKey{}
+	var deletedAt *time.Time
 	err := r.db.QueryRow(ctx, query, keyHash).Scan(
 		&apiKey.ID, &apiKey.UserID, &apiKey.KeyHash, &apiKey.Name,
 		&apiKey.Description, &apiKey.Permissions, &apiKey.IsActive,
 		&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt,
-		&apiKey.UpdatedAt, &apiKey.DeletedAt,
+		&apiKey.UpdatedAt,
 	)
+	apiKey.DeletedAt = deletedAt
 
 	if err == pgx.ErrNoRows {
 		return nil, fmt.Errorf("API key not found")
@@ -193,7 +195,7 @@ func (r *Repository) GetAPIKeyByHash(ctx context.Context, keyHash string) (*APIK
 // UpdateAPIKeyLastUsed updates API key's last used time
 func (r *Repository) UpdateAPIKeyLastUsed(ctx context.Context, keyID uuid.UUID) error {
 	query := `
-		UPDATE auth.api_keys
+		UPDATE public.api_keys
 		SET last_used_at = $1
 		WHERE id = $2
 	`
@@ -210,9 +212,9 @@ func (r *Repository) UpdateAPIKeyLastUsed(ctx context.Context, keyID uuid.UUID) 
 func (r *Repository) ListAPIKeysByUser(ctx context.Context, userID uuid.UUID) ([]*APIKey, error) {
 	query := `
 		SELECT id, user_id, key_hash, name, description, permissions, is_active,
-		       last_used_at, expires_at, created_at, updated_at, deleted_at
-		FROM auth.api_keys
-		WHERE user_id = $1 AND deleted_at IS NULL
+		       last_used_at, expires_at, created_at, updated_at
+		FROM public.api_keys
+		WHERE user_id = $1
 		ORDER BY created_at DESC
 	`
 
@@ -225,12 +227,14 @@ func (r *Repository) ListAPIKeysByUser(ctx context.Context, userID uuid.UUID) ([
 	var apiKeys []*APIKey
 	for rows.Next() {
 		apiKey := &APIKey{}
+		var deletedAt *time.Time
 		err := rows.Scan(
 			&apiKey.ID, &apiKey.UserID, &apiKey.KeyHash, &apiKey.Name,
 			&apiKey.Description, &apiKey.Permissions, &apiKey.IsActive,
 			&apiKey.LastUsedAt, &apiKey.ExpiresAt, &apiKey.CreatedAt,
-			&apiKey.UpdatedAt, &apiKey.DeletedAt,
+			&apiKey.UpdatedAt,
 		)
+		apiKey.DeletedAt = deletedAt
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan API key: %w", err)
 		}
@@ -243,14 +247,13 @@ func (r *Repository) ListAPIKeysByUser(ctx context.Context, userID uuid.UUID) ([
 // CreateRefreshToken creates a new refresh token
 func (r *Repository) CreateRefreshToken(ctx context.Context, token *RefreshToken) error {
 	query := `
-		INSERT INTO auth.refresh_tokens (id, user_id, token_hash, device_info, ip_address, expires_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO public.refresh_tokens (id, user_id, token_hash, expires_at)
+		VALUES ($1, $2, $3, $4)
 		RETURNING created_at
 	`
 
 	err := r.db.QueryRow(ctx, query,
-		token.ID, token.UserID, token.TokenHash, token.DeviceInfo,
-		token.IPAddress, token.ExpiresAt,
+		token.ID, token.UserID, token.TokenHash, token.ExpiresAt,
 	).Scan(&token.CreatedAt)
 
 	if err != nil {
@@ -263,16 +266,15 @@ func (r *Repository) CreateRefreshToken(ctx context.Context, token *RefreshToken
 // GetRefreshTokenByHash retrieves a refresh token by hash
 func (r *Repository) GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*RefreshToken, error) {
 	query := `
-		SELECT id, user_id, token_hash, device_info, ip_address, is_revoked,
+		SELECT id, user_id, token_hash, is_revoked,
 		       expires_at, created_at, revoked_at
-		FROM auth.refresh_tokens
+		FROM public.refresh_tokens
 		WHERE token_hash = $1
 	`
 
 	token := &RefreshToken{}
 	err := r.db.QueryRow(ctx, query, tokenHash).Scan(
-		&token.ID, &token.UserID, &token.TokenHash, &token.DeviceInfo,
-		&token.IPAddress, &token.IsRevoked, &token.ExpiresAt,
+		&token.ID, &token.UserID, &token.TokenHash, &token.IsRevoked, &token.ExpiresAt,
 		&token.CreatedAt, &token.RevokedAt,
 	)
 
@@ -289,7 +291,7 @@ func (r *Repository) GetRefreshTokenByHash(ctx context.Context, tokenHash string
 // RevokeRefreshToken revokes a refresh token
 func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenID uuid.UUID) error {
 	query := `
-		UPDATE auth.refresh_tokens
+		UPDATE public.refresh_tokens
 		SET is_revoked = true, revoked_at = $1
 		WHERE id = $2
 	`
@@ -305,7 +307,7 @@ func (r *Repository) RevokeRefreshToken(ctx context.Context, tokenID uuid.UUID) 
 // DeleteExpiredRefreshTokens deletes expired refresh tokens
 func (r *Repository) DeleteExpiredRefreshTokens(ctx context.Context) error {
 	query := `
-		DELETE FROM auth.refresh_tokens
+		DELETE FROM public.refresh_tokens
 		WHERE expires_at < $1
 	`
 
@@ -320,12 +322,12 @@ func (r *Repository) DeleteExpiredRefreshTokens(ctx context.Context) error {
 // UpdateUserAvatar updates user's avatar URL
 func (r *Repository) UpdateUserAvatar(ctx context.Context, userID uuid.UUID, avatarURL string) error {
 	query := `
-		UPDATE auth.users
-		SET avatar_url = $1, updated_at = CURRENT_TIMESTAMP
-		WHERE id = $2 AND deleted_at IS NULL
+		UPDATE public.users
+		SET updated_at = CURRENT_TIMESTAMP
+		WHERE id = $1
 	`
 
-	_, err := r.db.Exec(ctx, query, avatarURL, userID)
+	_, err := r.db.Exec(ctx, query, userID)
 	if err != nil {
 		return fmt.Errorf("failed to update user avatar: %w", err)
 	}

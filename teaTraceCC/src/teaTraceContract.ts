@@ -198,7 +198,7 @@ export class TeaTraceContract extends Contract {
         }
 
         total++;
-        
+
         // Handle offset
         if (skipped < offsetNum) {
           skipped++;
@@ -265,7 +265,7 @@ export class TeaTraceContract extends Contract {
         }
 
         total++;
-        
+
         // Handle offset
         if (skipped < offsetNum) {
           skipped++;
@@ -329,7 +329,7 @@ export class TeaTraceContract extends Contract {
         }
 
         total++;
-        
+
         // Handle offset
         if (skipped < offsetNum) {
           skipped++;
@@ -447,10 +447,20 @@ export class TeaTraceContract extends Contract {
 
     // Get transaction ID
     const txId = ctx.stub.getTxID();
-    
-    // Generate blockHash identifier from package data + txId
-    // Backend can update with actual blockhash later
-    const blockHash = this.generatePackageBlockHash(packageId, batchId, weight, productionDate, txId);
+
+    // Get hash secret from environment (optional for backward compatibility)
+    // If not set, will generate v1 hash (without secret)
+    const hashSecret = process.env.HASH_SECRET || "";
+
+    // Generate blockHash identifier from package data + txId + secret (if available)
+    const blockHash = this.generatePackageBlockHash(
+      packageId,
+      batchId,
+      weight,
+      productionDate,
+      txId,
+      hashSecret  // Pass secret for v2 hash, or empty string for v1 hash
+    );
 
     const owner =
       ctx.clientIdentity.getAttributeValue("owner") ||
@@ -462,6 +472,7 @@ export class TeaTraceContract extends Contract {
       packageId,
       batchId,
       blockHash,
+      hashVersion: hashSecret ? "v2" : "v1", // Track hash format for verification
       txId,
       weight,
       productionDate,
@@ -475,18 +486,19 @@ export class TeaTraceContract extends Contract {
     // Use composite key for efficient querying: PACKAGE~batchId~packageId
     // This allows efficient queries by batchId using getStateByPartialCompositeKey
     const packageKey = ctx.stub.createCompositeKey("PACKAGE", [batchId, packageId]);
-    
+
     // Store with simple key for backward compatibility and direct access
     await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
-    
+
     // Store with composite key for efficient batch queries
     await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
-    
+
     return pkg;
   }
 
   /**
    * Verify a package by comparing blockhash
+   * Supports both v1 (no secret) and v2 (with secret) hash formats
    * Args: [packageId, blockHash?]
    */
   public async verifyPackage(
@@ -501,19 +513,47 @@ export class TeaTraceContract extends Contract {
 
     // If blockHash provided, compare
     if (providedBlockHash) {
-      const isValid = pkg.blockHash === providedBlockHash;
-      
+      let isValid = false;
+
+      // Check hash version to determine verification method
+      const hashVersion = pkg.hashVersion || "v1"; // Default to v1 for backward compatibility
+
+      if (hashVersion === "v2") {
+        // V2 hash: Regenerate hash with secret and compare
+        const hashSecret = process.env.HASH_SECRET || "";
+        const regeneratedHash = this.generatePackageBlockHash(
+          pkg.packageId,
+          pkg.batchId,
+          pkg.weight,
+          pkg.productionDate,
+          pkg.txId,
+          hashSecret
+        );
+        isValid = regeneratedHash === providedBlockHash;
+      } else {
+        // V1 hash: Regenerate hash without secret and compare
+        const regeneratedHash = this.generatePackageBlockHash(
+          pkg.packageId,
+          pkg.batchId,
+          pkg.weight,
+          pkg.productionDate,
+          pkg.txId
+          // No secret for v1
+        );
+        isValid = regeneratedHash === providedBlockHash;
+      }
+
       // If valid and status is CREATED, update to VERIFIED
       if (isValid && pkg.status === "CREATED") {
         pkg.status = "VERIFIED";
         pkg.timestamp = this.getCurrentTimestamp(ctx);
-        
+
         // Update both simple key and composite key
         await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
         const packageKey = ctx.stub.createCompositeKey("PACKAGE", [pkg.batchId, packageId]);
         await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
       }
-      
+
       return { isValid, package: pkg };
     }
 
@@ -572,7 +612,7 @@ export class TeaTraceContract extends Contract {
       }
 
       total++;
-      
+
       // Handle offset
       if (skipped < offsetNum) {
         skipped++;
@@ -625,7 +665,7 @@ export class TeaTraceContract extends Contract {
         }
 
         total++;
-        
+
         // Handle offset
         if (skipped < offsetNum) {
           skipped++;
@@ -692,7 +732,7 @@ export class TeaTraceContract extends Contract {
         }
 
         total++;
-        
+
         // Handle offset
         if (skipped < offsetNum) {
           skipped++;
@@ -771,7 +811,7 @@ export class TeaTraceContract extends Contract {
     await ctx.stub.putState(packageId, Buffer.from(JSON.stringify(pkg)));
     const packageKey = ctx.stub.createCompositeKey("PACKAGE", [pkg.batchId, packageId]);
     await ctx.stub.putState(packageKey, Buffer.from(JSON.stringify(pkg)));
-    
+
     return pkg;
   }
 
@@ -819,16 +859,26 @@ export class TeaTraceContract extends Contract {
   /**
    * Generate a unique blockHash identifier for package
    * This is a composite hash from package data + transaction ID
-   * Backend can update with actual blockhash from blockchain later
+   * Supports v1 (no secret) and v2 (with secret) hash formats
+   * 
+   * @param secret - Optional secret salt for enhanced security (v2 hash)
    */
   private generatePackageBlockHash(
     packageId: string,
     batchId: string,
     weight: number,
     productionDate: string,
-    txId: string
+    txId: string,
+    secret?: string
   ): string {
-    const payload = `${packageId}|${batchId}|${weight}|${productionDate}|${txId}`;
+    let payload = `${packageId}|${batchId}|${weight}|${productionDate}|${txId}`;
+
+    // If secret provided, append it to payload (v2 hash)
+    // This prevents rainbow table attacks while maintaining backward compatibility
+    if (secret) {
+      payload += `|${secret}`;
+    }
+
     return crypto.createHash("sha256").update(payload).digest("hex");
   }
 

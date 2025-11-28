@@ -1,8 +1,8 @@
 # API Gateway Layer - Kiến Trúc & Hướng Dẫn
 
 **Ngày tạo:** 2025-11-12  
-**Version:** 1.1.0  
-**Last Updated:** 2025-11-24  
+**Version:** 2.0.0  
+**Last Updated:** 2025-11-27  
 **Layer:** API Gateway (REST API cho Blockchain)
 
 ---
@@ -135,7 +135,7 @@ API Gateway là lớp trung gian giữa **Frontend/Backend** và **Hyperledger F
 │         └────────────────┼────────────────────┘                    │
 │                          │                                        │
 │                    Channel: ibnchannel                            │
-│                    Chaincode: teaTraceCC v1.0.0                    │
+│                    Chaincode: teaTraceCC v1.1.0                   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 

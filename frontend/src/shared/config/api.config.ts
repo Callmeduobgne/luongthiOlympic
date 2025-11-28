@@ -64,8 +64,8 @@ export const API_ENDPOINTS = {
   BLOCKS: {
     // Backend endpoints: /api/v1/blockchain/blocks/{number}
     // Note: Backend doesn't have list blocks endpoint, only get by number
-    LIST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
-    LATEST: (_channel: string) => `/api/v1/blockchain/channel/info`, // Use channel info instead
+    LIST: (channel: string) => `/api/v1/blocks/${channel}`,
+    LATEST: (channel: string) => `/api/v1/blocks/${channel}/latest`,
     GET: (_channel: string, number: number) => `/api/v1/blockchain/blocks/${number}`,
     GET_BY_TXID: (txid: string) => `/api/v1/blockchain/blocks/tx/${txid}`,
     CHANNEL_INFO: '/api/v1/blockchain/channel/info',

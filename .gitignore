@@ -78,6 +78,9 @@ dist/
 # Channel artifacts with permission issues
 core/channel-artifacts/ibnchannel-config-update.pb
 core/channel-artifacts/ibnchannel-envelope.json
+core/configtx/-
+core/organizations/**/peers/**/*.tx
+core/organizations/**/peers/**/*.block
 
 # Fabric CA - Sensitive certificates and keys
 core/fabric-ca/**/keystore/
@@ -96,8 +99,9 @@ core/organizations/**/users/**/msp/keystore/
 core/organizations/**/users/**/msp/signcerts/
 
 # Server binaries
-server
-main
-*/server
-*/main
+# Server binaries
+# server
+# main
+# */server
+# */main
 

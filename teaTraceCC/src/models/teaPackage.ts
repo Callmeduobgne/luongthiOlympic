@@ -21,6 +21,7 @@ export interface TeaPackage {
   packageId: string;
   batchId: string;
   blockHash: string; // Blockhash từ transaction khi tạo package
+  hashVersion?: string; // "v1" (no secret) or "v2" (with secret) - for backward compatibility
   txId: string; // Transaction ID khi tạo package
   weight: number; // Trọng lượng gói (gram)
   productionDate: string; // Ngày sản xuất (YYYY-MM-DD)

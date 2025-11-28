@@ -32,12 +32,14 @@ import (
 	explorerhandler "github.com/ibn-network/api-gateway/internal/handlers/explorer"
 	metricshandler "github.com/ibn-network/api-gateway/internal/handlers/metrics"
 	networkhandler "github.com/ibn-network/api-gateway/internal/handlers/network"
+	teatracehandler "github.com/ibn-network/api-gateway/internal/handlers/teatrace"
 	transactionhandler "github.com/ibn-network/api-gateway/internal/handlers/transaction"
 	"github.com/ibn-network/api-gateway/internal/handlers/users"
 	"github.com/ibn-network/api-gateway/internal/middleware"
 	explorerservice "github.com/ibn-network/api-gateway/internal/services/explorer"
 	metricsservice "github.com/ibn-network/api-gateway/internal/services/metrics"
 	networkservice "github.com/ibn-network/api-gateway/internal/services/network"
+	teatraceservice "github.com/ibn-network/api-gateway/internal/services/teatrace"
 	httpSwagger "github.com/swaggo/http-swagger"
 	"go.uber.org/zap"
 )
@@ -57,10 +59,12 @@ func SetupRoutes(
 	transactionHandler *transactionhandler.TransactionHandler,
 	eventHandler *eventhandler.EventHandler,
 	explorerHandler *explorerhandler.Handler,
+	teatraceHandler *teatracehandler.Handler,
 	auditHandler *audithandler.Handler,
 	metricsHandler *metricshandler.Handler,
 	metricsService *metricsservice.Service,
 	explorerService *explorerservice.Service,
+	teatraceService *teatraceservice.Service,
 	networkService *networkservice.Service,
 	authMW *middleware.AuthMiddleware,
 	rateLimitMW *middleware.RateLimitMiddleware,
@@ -444,6 +448,22 @@ func SetupRoutes(
 
 					// Permission check
 					r.Post("/check", aclHandler.CheckPermission)
+				})
+			})
+		}
+
+		// Tea Traceability routes
+		if teatraceHandler != nil {
+			r.Route("/teatrace", func(r chi.Router) {
+				// Public routes (verification)
+				r.Post("/verify-by-hash", teatraceHandler.VerifyByHash)
+
+				// Protected routes
+				r.Group(func(r chi.Router) {
+					r.Use(authMW.Authenticate)
+					r.Use(rateLimitMW.Limit)
+
+					// Future routes: batches, packages, etc.
 				})
 			})
 		}

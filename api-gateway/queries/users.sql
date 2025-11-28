@@ -10,8 +10,8 @@ ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 
 -- name: CreateUser :one
-INSERT INTO users (email, password_hash, msp_id, role)
-VALUES ($1, $2, $3, $4)
+INSERT INTO users (username, email, password_hash, msp_id, role)
+VALUES ($1, $2, $3, $4, $5)
 RETURNING *;
 
 -- name: UpdateUser :one

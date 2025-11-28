@@ -88,6 +88,7 @@ func (s *Service) Register(ctx context.Context, req *models.RegisterRequest) (*m
 
 	// Create user
 	user, err := s.queries.CreateUser(ctx, s.db, db.CreateUserParams{
+		Username:     req.Username,
 		Email:        req.Email,
 		PasswordHash: string(hashedPassword),
 		MspID:        mspID,

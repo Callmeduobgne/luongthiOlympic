@@ -37,12 +37,13 @@ func (q *Queries) CountUsers(ctx context.Context, db DBTX) (int64, error) {
 }
 
 const createUser = `-- name: CreateUser :one
-INSERT INTO users (email, password_hash, msp_id, role)
-VALUES ($1, $2, $3, $4)
-RETURNING id, email, password_hash, msp_id, role, is_active, created_at, updated_at
+INSERT INTO users (username, email, password_hash, msp_id, role)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id, username, email, password_hash, msp_id, role, is_active, created_at, updated_at
 `
 
 type CreateUserParams struct {
+	Username     string `json:"username"`
 	Email        string `json:"email"`
 	PasswordHash string `json:"password_hash"`
 	MspID        string `json:"msp_id"`
@@ -51,6 +52,7 @@ type CreateUserParams struct {
 
 func (q *Queries) CreateUser(ctx context.Context, db DBTX, arg CreateUserParams) (User, error) {
 	row := db.QueryRow(ctx, createUser,
+		arg.Username,
 		arg.Email,
 		arg.PasswordHash,
 		arg.MspID,
@@ -59,6 +61,7 @@ func (q *Queries) CreateUser(ctx context.Context, db DBTX, arg CreateUserParams)
 	var i User
 	err := row.Scan(
 		&i.ID,
+		&i.Username,
 		&i.Email,
 		&i.PasswordHash,
 		&i.MspID,

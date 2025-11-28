@@ -1,0 +1,76 @@
+--progress is a global compose flag, better use `docker compose --progress xx build ...
+time="2025-11-27T09:47:00Z" level=warning msg="/home/ubuntu/luongbeo/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+#1 [internal] load local bake definitions
+#1 reading from stdin 556B done
+#1 DONE 0.0s
+
+#2 [internal] load build definition from Dockerfile
+#2 transferring dockerfile: 2.10kB done
+#2 DONE 0.1s
+
+#3 [internal] load metadata for docker.io/library/alpine:latest
+#3 DONE 0.0s
+
+#4 [internal] load metadata for docker.io/library/golang:1.23-alpine
+#4 DONE 0.4s
+
+#5 [internal] load .dockerignore
+#5 transferring context: 2B done
+#5 DONE 0.1s
+
+#6 [builder 1/7] FROM docker.io/library/golang:1.23-alpine@sha256:383395b794dffa5b53012a212365d40c8e37109a626ca30d6151c8348d380b5f
+#6 DONE 0.0s
+
+#7 [stage-1 1/6] FROM docker.io/library/alpine:latest
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 9.25kB 0.0s done
+#8 DONE 0.1s
+
+#9 [builder 5/7] RUN for i in 1 2 3; do         go mod download && break ||         (echo "Attempt $i failed, retrying..." && sleep $((i * 5)));     done || (echo "All download attempts failed" && exit 1)
+#9 CACHED
+
+#10 [builder 2/7] RUN apk add --no-cache git make ca-certificates
+#10 CACHED
+
+#11 [builder 3/7] WORKDIR /app
+#11 CACHED
+
+#12 [builder 4/7] COPY go.mod go.sum ./
+#12 CACHED
+
+#13 [builder 6/7] COPY . .
+#13 CACHED
+
+#14 [builder 7/7] RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/api-gateway cmd/server/main.go
+#14 14.24 # command-line-arguments
+#14 14.24 cmd/server/main.go:330:3: too many arguments in call to routes.SetupRoutes
+#14 14.24 	have (*handlers.BatchHandler, *handlers.HealthHandler, *"github.com/ibn-network/api-gateway/internal/handlers/auth".AuthHandler, *users.UserHandler, *"github.com/ibn-network/api-gateway/internal/handlers/acl".ACLHandler, *"github.com/ibn-network/api-gateway/internal/handlers/chaincode".ChaincodeHandler, *"github.com/ibn-network/api-gateway/internal/handlers/channel".ChannelHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".NetworkHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".DiscoveryHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".LogsHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/explorer".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/teatrace".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/audit".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/metrics".Handler, *"github.com/ibn-network/api-gateway/internal/services/metrics".Service, *"github.com/ibn-network/api-gateway/internal/services/explorer".Service, *"github.com/ibn-network/api-gateway/internal/services/teatrace".Service, *"github.com/ibn-network/api-gateway/internal/services/network".Service, *"github.com/ibn-network/api-gateway/internal/middleware".AuthMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RateLimitMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".LoggerMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".CORSMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RecoveryMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".TracingMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".AuditMiddleware, *config.WebSocketConfig, *"github.com/ibn-network/api-gateway/internal/middleware".WebSocketRateLimitMiddleware, *zap.Logger)
+#14 14.24 	want (*handlers.BatchHandler, *handlers.HealthHandler, *"github.com/ibn-network/api-gateway/internal/handlers/auth".AuthHandler, *users.UserHandler, *"github.com/ibn-network/api-gateway/internal/handlers/acl".ACLHandler, *"github.com/ibn-network/api-gateway/internal/handlers/chaincode".ChaincodeHandler, *"github.com/ibn-network/api-gateway/internal/handlers/channel".ChannelHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".NetworkHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".DiscoveryHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".LogsHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/explorer".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/teatrace".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/audit".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/metrics".Handler, *"github.com/ibn-network/api-gateway/internal/services/metrics".Service, *"github.com/ibn-network/api-gateway/internal/services/explorer".Service, *"github.com/ibn-network/api-gateway/internal/services/teatrace".Service, *"github.com/ibn-network/api-gateway/internal/services/network".Service, *"github.com/ibn-network/api-gateway/internal/middleware".AuthMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RateLimitMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".LoggerMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".CORSMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RecoveryMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".TracingMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".AuditMiddleware, *config.WebSocketConfig, *"github.com/ibn-network/api-gateway/internal/middleware".WebSocketRateLimitMiddleware, *zap.Logger)
+#14 ERROR: process "/bin/sh -c CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/api-gateway cmd/server/main.go" did not complete successfully: exit code: 1
+------
+ > [builder 7/7] RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/api-gateway cmd/server/main.go:
+14.24 # command-line-arguments
+14.24 cmd/server/main.go:330:3: too many arguments in call to routes.SetupRoutes
+14.24 	have (*handlers.BatchHandler, *handlers.HealthHandler, *"github.com/ibn-network/api-gateway/internal/handlers/auth".AuthHandler, *users.UserHandler, *"github.com/ibn-network/api-gateway/internal/handlers/acl".ACLHandler, *"github.com/ibn-network/api-gateway/internal/handlers/chaincode".ChaincodeHandler, *"github.com/ibn-network/api-gateway/internal/handlers/channel".ChannelHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".NetworkHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".DiscoveryHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".LogsHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/explorer".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/teatrace".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/audit".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/metrics".Handler, *"github.com/ibn-network/api-gateway/internal/services/metrics".Service, *"github.com/ibn-network/api-gateway/internal/services/explorer".Service, *"github.com/ibn-network/api-gateway/internal/services/teatrace".Service, *"github.com/ibn-network/api-gateway/internal/services/network".Service, *"github.com/ibn-network/api-gateway/internal/middleware".AuthMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RateLimitMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".LoggerMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".CORSMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RecoveryMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".TracingMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".AuditMiddleware, *config.WebSocketConfig, *"github.com/ibn-network/api-gateway/internal/middleware".WebSocketRateLimitMiddleware, *zap.Logger)
+14.24 	want (*handlers.BatchHandler, *handlers.HealthHandler, *"github.com/ibn-network/api-gateway/internal/handlers/auth".AuthHandler, *users.UserHandler, *"github.com/ibn-network/api-gateway/internal/handlers/acl".ACLHandler, *"github.com/ibn-network/api-gateway/internal/handlers/chaincode".ChaincodeHandler, *"github.com/ibn-network/api-gateway/internal/handlers/channel".ChannelHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".NetworkHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".DiscoveryHandler, *"github.com/ibn-network/api-gateway/internal/handlers/network".LogsHandler, *"github.com/ibn-network/api-gateway/internal/handlers/transaction".TransactionHandler, *"github.com/ibn-network/api-gateway/internal/handlers/event".EventHandler, *"github.com/ibn-network/api-gateway/internal/handlers/explorer".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/teatrace".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/audit".Handler, *"github.com/ibn-network/api-gateway/internal/handlers/metrics".Handler, *"github.com/ibn-network/api-gateway/internal/services/metrics".Service, *"github.com/ibn-network/api-gateway/internal/services/explorer".Service, *"github.com/ibn-network/api-gateway/internal/services/teatrace".Service, *"github.com/ibn-network/api-gateway/internal/services/network".Service, *"github.com/ibn-network/api-gateway/internal/middleware".AuthMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RateLimitMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".LoggerMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".CORSMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".RecoveryMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".TracingMiddleware, *"github.com/ibn-network/api-gateway/internal/middleware".AuditMiddleware, *config.WebSocketConfig, *"github.com/ibn-network/api-gateway/internal/middleware".WebSocketRateLimitMiddleware, *zap.Logger)
+------
+Dockerfile:36
+
+--------------------
+
+  34 |     
+
+  35 |     # Build application
+
+  36 | >>> RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/api-gateway cmd/server/main.go
+
+  37 |     
+
+  38 |     # Stage 2: Runtime
+
+--------------------
+
+failed to solve: process "/bin/sh -c CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o bin/api-gateway cmd/server/main.go" did not complete successfully: exit code: 1
+

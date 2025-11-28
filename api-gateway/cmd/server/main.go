@@ -34,6 +34,7 @@ import (
 	explorerhandler "github.com/ibn-network/api-gateway/internal/handlers/explorer"
 	metricshandler "github.com/ibn-network/api-gateway/internal/handlers/metrics"
 	networkhandler "github.com/ibn-network/api-gateway/internal/handlers/network"
+	teatracehandler "github.com/ibn-network/api-gateway/internal/handlers/teatrace"
 	transactionhandler "github.com/ibn-network/api-gateway/internal/handlers/transaction"
 	"github.com/ibn-network/api-gateway/internal/handlers/users"
 	"github.com/ibn-network/api-gateway/internal/middleware"
@@ -52,6 +53,7 @@ import (
 	indexerservice "github.com/ibn-network/api-gateway/internal/services/indexer"
 	metricsservice "github.com/ibn-network/api-gateway/internal/services/metrics"
 	networkservice "github.com/ibn-network/api-gateway/internal/services/network"
+	teatraceservice "github.com/ibn-network/api-gateway/internal/services/teatrace"
 	transactionservice "github.com/ibn-network/api-gateway/internal/services/transaction"
 	"github.com/ibn-network/api-gateway/internal/utils"
 	"go.uber.org/zap"
@@ -285,6 +287,10 @@ func main() {
 	)
 	metricsHandler := metricshandler.NewHandler(metricsService, logger)
 
+	// Initialize Tea Traceability service
+	teatraceService := teatraceservice.NewService(transactionService, logger)
+	teatraceHandler := teatracehandler.NewHandler(teatraceService, logger)
+
 	// Initialize ACL service
 	aclService := aclservice.NewService(db, logger)
 	aclHandler := aclhandler.NewACLHandler(aclService, logger)
@@ -304,10 +310,12 @@ func main() {
 		transactionHandler,
 		eventHandler,
 		explorerHandler,
+		teatraceHandler,
 		auditHandler,
 		metricsHandler,
 		metricsService,
 		explorerService,
+		teatraceService,
 		networkService,
 		authMW,
 		rateLimitMW,

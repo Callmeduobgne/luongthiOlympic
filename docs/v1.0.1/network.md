@@ -1,8 +1,8 @@
 # Core Blockchain Layer - Tổng Hợp
 
 **Ngày tạo:** 2025-11-12  
-**Version:** 1.1.0  
-**Last Updated:** 2025-11-24  
+**Version:** 2.0.0  
+**Last Updated:** 2025-11-27  
 **Layer:** Core/Blockchain (Hyperledger Fabric Network)
 
 ---
@@ -38,7 +38,7 @@ Tài liệu này tổng hợp tất cả thông tin về **Core Blockchain Layer
 - Peer Nodes: 3 nodes (Org1)
 - State Database: CouchDB (3 instances)
 - Channel: ibnchannel
-- Chaincode: teaTraceCC v1.0.0
+- Chaincode: teaTraceCC v1.1.0 (Enhanced with Package Management)
 - Domain: `.ibn.vn`
 
 ### 2. Chaincode Commands
@@ -70,10 +70,11 @@ Tài liệu này tổng hợp tất cả thông tin về **Core Blockchain Layer
 
 **Chaincode Info:**
 - Name: teaTraceCC
-- Version: 1.0.0
-- Sequence: 2
+- Version: 1.1.0
+- Sequence: 6+ (Latest)
 - Channel: ibnchannel
 - Language: Node.js (TypeScript)
+- New Features: Package Management, Enhanced Hash Verification (v1/v2)
 
 ---
 
@@ -123,7 +124,7 @@ Tài liệu này tổng hợp tất cả thông tin về **Core Blockchain Layer
 
 4. **Channel**
    - ibnchannel
-   - Chaincode: teaTraceCC v1.0.0
+   - Chaincode: teaTraceCC v1.1.0
 
 ---
 
@@ -167,25 +168,48 @@ Sử dụng helper script để dễ dàng hơn:
 
 ## 📦 Chaincode Functions
 
-### teaTraceCC v1.0.0
+### teaTraceCC v1.1.0
 
-**Query Functions:**
+**Batch Query Functions:**
 - `getBatchInfo(batchId)` - Get batch information by ID (Public access)
+- `getAllBatches(limit?, offset?)` - Get all batches with pagination
+- `getBatchesByStatus(status, limit?, offset?)` - Get batches by status
+- `getBatchesByOwner(owner, limit?, offset?)` - Get batches by owner
+- `getBatchHistory(batchId)` - Get batch history (all changes)
 
-**Invoke Functions:**
+**Batch Invoke Functions:**
 - `createBatch(batchId, farmLocation, harvestDate, processingInfo, qualityCert)` - Create new batch (Farmer role required)
 - `verifyBatch(batchId, hashInput)` - Verify batch hash (Farmer, Verifier, Admin roles)
 - `updateBatchStatus(batchId, status)` - Update batch status (Farmer, Admin roles)
 
-**Status Values:**
+**Package Query Functions:**
+- `getPackageInfo(packageId)` - Get package information by ID (Public access)
+- `getAllPackages(limit?, offset?)` - Get all packages with pagination
+- `getPackagesByBatch(batchId, limit?, offset?)` - Get packages by batch ID
+- `getPackagesByStatus(status, limit?, offset?)` - Get packages by status
+- `getPackageHistory(packageId)` - Get package history (all changes)
+
+**Package Invoke Functions:**
+- `createPackage(packageId, batchId, weight, productionDate, expiryDate?, qrCode?)` - Create new package (Farmer, Admin roles)
+- `verifyPackage(packageId, blockHash?)` - Verify package by comparing blockhash (Public access)
+- `updatePackageStatus(packageId, status)` - Update package status (Farmer, Admin roles)
+
+**Batch Status Values:**
 - `CREATED` - Batch mới được tạo
 - `VERIFIED` - Batch đã được xác minh hash
 - `EXPIRED` - Batch đã hết hạn
+
+**Package Status Values:**
+- `CREATED` - Package mới được tạo
+- `VERIFIED` - Package đã được xác minh
+- `SOLD` - Package đã được bán
+- `EXPIRED` - Package đã hết hạn
 
 ### Data Model: TeaBatch
 
 ```json
 {
+  "docType": "batch",
   "batchId": "BATCH001",
   "farmLocation": "Moc Chau, Son La",
   "harvestDate": "2024-11-12",
@@ -199,15 +223,51 @@ Sử dụng helper script để dễ dàng hơn:
 ```
 
 **Field Descriptions:**
+- `docType` - Document type for CouchDB indexing ("batch")
 - `batchId` - Unique identifier cho batch
-- `farmLocation` - Vị trí nông trại (thay vì `farmName`)
+- `farmLocation` - Vị trí nông trại
 - `harvestDate` - Ngày thu hoạch (YYYY-MM-DD)
-- `processingInfo` - Thông tin xử lý (thay vì `certification`)
-- `qualityCert` - Chứng chỉ chất lượng (thay vì `certificateId`)
-- `hashValue` - SHA-256 hash để verify integrity (thay vì `verificationHash`)
+- `processingInfo` - Thông tin xử lý
+- `qualityCert` - Chứng chỉ chất lượng
+- `hashValue` - SHA-256 hash để verify integrity
 - `owner` - MSP ID của owner
-- `timestamp` - ISO 8601 timestamp (thay vì `createdAt`/`updatedAt`)
+- `timestamp` - ISO 8601 timestamp
 - `status` - Trạng thái: CREATED, VERIFIED, EXPIRED
+
+### Data Model: TeaPackage
+
+```json
+{
+  "docType": "package",
+  "packageId": "PKG001",
+  "batchId": "BATCH001",
+  "blockHash": "def456...",
+  "hashVersion": "v2",
+  "txId": "abc123...",
+  "weight": 500,
+  "productionDate": "2024-11-27",
+  "expiryDate": "2025-11-27",
+  "qrCode": "QR_DATA_HERE",
+  "status": "CREATED",
+  "owner": "Org1MSP",
+  "timestamp": "2024-11-27T10:00:00.000Z"
+}
+```
+
+**Field Descriptions:**
+- `docType` - Document type for CouchDB indexing ("package")
+- `packageId` - Unique identifier cho package
+- `batchId` - Reference to parent batch
+- `blockHash` - SHA-256 hash for verification (v1 or v2)
+- `hashVersion` - Hash format version ("v1" without secret, "v2" with secret)
+- `txId` - Transaction ID khi tạo package
+- `weight` - Trọng lượng gói (gram)
+- `productionDate` - Ngày sản xuất (YYYY-MM-DD)
+- `expiryDate` - Hạn sử dụng (YYYY-MM-DD, optional)
+- `qrCode` - QR code data (optional)
+- `status` - Trạng thái: CREATED, VERIFIED, SOLD, EXPIRED
+- `owner` - MSP ID của owner
+- `timestamp` - ISO 8601 timestamp
 
 ---
 
@@ -278,7 +338,7 @@ API Gateway kết nối với Core Blockchain Layer thông qua:
 - ✅ 3 CouchDB instances
 - ✅ 1 Fabric CA
 - ✅ 1 Channel (ibnchannel)
-- ✅ 1 Chaincode (teaTraceCC v1.0.0)
+- ✅ 1 Chaincode (teaTraceCC v1.1.0)
 
 ### Tính Năng
 - ✅ High availability
@@ -286,6 +346,11 @@ API Gateway kết nối với Core Blockchain Layer thông qua:
 - ✅ Certificate management
 - ✅ Health monitoring
 - ✅ Production-ready
+- ✅ Package management (v1.1.0)
+- ✅ Enhanced hash verification with secret salt (v1/v2)
+- ✅ Pagination support for queries
+- ✅ History tracking for batches and packages
+- ✅ CouchDB rich queries with indexes
 
 ### Tài Liệu
 - `network-architecture-analysis.md` - Kiến trúc chi tiết
@@ -294,5 +359,5 @@ API Gateway kết nối với Core Blockchain Layer thông qua:
 
 ---
 
-**Last Updated:** 2025-01-27
+**Last Updated:** 2025-11-27
 

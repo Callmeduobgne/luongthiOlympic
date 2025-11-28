@@ -25,6 +25,7 @@ import { SettingsPage } from '@features/settings/pages/SettingsPage'
 import { TeaShopHomepage } from '@/pages/TeaShopHomepage'
 import VerifyPackage from '@/pages/VerifyPackage'
 import VerifyHashPage from '@/pages/VerifyHashPage'
+import { QRCodeGeneratorPage } from '@/pages/QRCodeGeneratorPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -85,6 +86,14 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <NetworkPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/qr-generator',
+    element: (
+      <ProtectedRoute>
+        <QRCodeGeneratorPage />
       </ProtectedRoute>
     ),
   },

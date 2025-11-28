@@ -562,7 +562,7 @@ services:
       FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
       FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
       FABRIC_CHANNEL_NAME: ibnchannel
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_SECRET: ibn_ea6d5c1d4f7b438b91ce2f3a7d8cbe95
       JWT_ISSUER: ibn-api-gateway
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 168h
@@ -590,10 +590,12 @@ services:
       ADMIN_SERVICE_TIMEOUT: 60s
       # Loki configuration (for network logs)
       LOKI_URL: http://loki:3100
+      # Hash verification secret (MUST match chaincode and API gateway)
+      HASH_SECRET: ${HASH_SECRET:-ibn_default_hash_secret_change_in_production_min_32_chars_value}
     volumes:
     - ./core/organizations:/fabric/organizations:ro
     ports:
-    - 9090:8080
+    - 9900:8080
     networks:
     - ibn-network
     - logging  # For database, redis, API Gateway access
@@ -606,11 +608,9 @@ services:
     healthcheck:
       test:
       - CMD
-      - wget
-      - --no-verbose
-      - --tries=1
-      - --spider
-      - http://localhost:8080/health
+      - sh
+      - -c
+      - wget -qO- http://localhost:8080/health >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -624,7 +624,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     ports:
-    - 3001:80
+    - 9999:80
     networks:
     - ibn-network
     - logging
@@ -698,7 +698,7 @@ services:
       - CMD
       - sh
       - -c
-      - fabric-ca-client getcainfo -u https://ca.org1.ibn.vn:7054 --tls.certfiles /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-tls.crt >/dev/null 2>&1
+      - fabric-ca-client getcainfo -u https://localhost:7054 --tls.certfiles /etc/hyperledger/fabric-ca-server-config/ca.org1.ibn.vn-tls.crt >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 5
@@ -737,17 +737,11 @@ services:
       FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
       FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
       FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
-      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/tlsca/tlsca.org1.ibn.vn-cert.pem
       FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
       FABRIC_CA_ADMIN_USER: admin
       FABRIC_CA_ADMIN_PASS: adminpw
-      FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
-      FABRIC_CA_ADMIN_USER: admin
-      FABRIC_CA_ADMIN_PASS: adminpw
-      FABRIC_CA_MSP_DIR: /app/organizations/peerOrganizations/org1.ibn.vn
-      FABRIC_CA_ADMIN_USER: admin
-      FABRIC_CA_ADMIN_PASS: adminpw
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      JWT_SECRET: ibn_5f2c8e7d9ab441c3b0e6f2d4a9c5e7b1
       JWT_EXPIRY: 24h
       JWT_ISSUER: ibn-api-gateway
       RATE_LIMIT_ENABLED: 'true'
@@ -767,8 +761,10 @@ services:
       CORS_MAX_AGE: 300
       CORS_ALLOW_CREDENTIALS: 'true'
       LOKI_URL: http://loki:3100
+      # Hash verification secret (MUST match chaincode and backend)
+      HASH_SECRET: ${HASH_SECRET:-ibn_default_hash_secret_change_in_production_min_32_chars_value}
     ports:
-    - 8084:8080
+    - 9804:8080
     volumes:
     - ./core/organizations:/app/organizations:ro
     networks:
@@ -784,11 +780,9 @@ services:
     healthcheck:
       test:
       - CMD
-      - wget
-      - --no-verbose
-      - --tries=1
-      - --spider
-      - http://localhost:8080/health
+      - sh
+      - -c
+      - wget -qO- http://localhost:8080/health >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -827,8 +821,8 @@ services:
       FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
       FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
       FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
-      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/tlsca/tlsca.org1.ibn.vn-cert.pem
+      JWT_SECRET: ibn_a37cf2d9e45b4c21a8f0d7635be19c24
       JWT_EXPIRY: 24h
       JWT_ISSUER: ibn-api-gateway
       RATE_LIMIT_ENABLED: 'true'
@@ -848,8 +842,10 @@ services:
       CORS_MAX_AGE: 300
       CORS_ALLOW_CREDENTIALS: 'true'
       LOKI_URL: http://loki:3100
+      # Hash verification secret (MUST match chaincode and backend)
+      HASH_SECRET: ${HASH_SECRET:-ibn_default_hash_secret_change_in_production_min_32_chars_value}
     ports:
-    - 8082:8080
+    - 9802:8080
     volumes:
     - ./core/organizations:/app/organizations:ro
     networks:
@@ -865,11 +861,9 @@ services:
     healthcheck:
       test:
       - CMD
-      - wget
-      - --no-verbose
-      - --tries=1
-      - --spider
-      - http://localhost:8080/health
+      - sh
+      - -c
+      - wget -qO- http://localhost:8080/health >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -908,8 +902,8 @@ services:
       FABRIC_ADDITIONAL_PEERS: peer0.org1.ibn.vn:7051,peer1.org1.ibn.vn:8051,peer2.org1.ibn.vn:9051
       FABRIC_ORDERERS: orderer.ibn.vn:7050,orderer1.ibn.vn:8050,orderer2.ibn.vn:9050
       FABRIC_CA_URL: https://ca.org1.ibn.vn:7054
-      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/ca/ca.org1.ibn.vn-tls.crt
-      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      FABRIC_CA_TLS_CERT_PATH: /app/organizations/peerOrganizations/org1.ibn.vn/tlsca/tlsca.org1.ibn.vn-cert.pem
+      JWT_SECRET: ibn_c8f4e1d2a7b943cc9e2d4a6f1b8c7d35
       JWT_EXPIRY: 24h
       JWT_ISSUER: ibn-api-gateway
       RATE_LIMIT_ENABLED: 'true'
@@ -930,7 +924,7 @@ services:
       CORS_ALLOW_CREDENTIALS: 'true'
       LOKI_URL: http://loki:3100
     ports:
-    - 8083:8080
+    - 9803:8080
     volumes:
     - ./core/organizations:/app/organizations:ro
     networks:
@@ -946,11 +940,9 @@ services:
     healthcheck:
       test:
       - CMD
-      - wget
-      - --no-verbose
-      - --tries=1
-      - --spider
-      - http://localhost:8080/health
+      - sh
+      - -c
+      - wget -qO- http://localhost:8080/health >/dev/null 2>&1
       interval: 30s
       timeout: 10s
       retries: 3
@@ -963,7 +955,7 @@ services:
     - ./api-gateway/docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     - gateway_nginx_logs:/var/log/nginx
     ports:
-    - 8085:80
+    - 9805:80
     networks:
     - ibn-network
     - logging
@@ -971,8 +963,6 @@ services:
       api-gateway-1:
         condition: service_healthy
       api-gateway-2:
-        condition: service_healthy
-      api-gateway-3:
         condition: service_healthy
     healthcheck:
       test:
@@ -1013,7 +1003,7 @@ services:
     # Note: Port 8090 exposed for health checks only
     # Admin Service should only be accessed via admin-network (internal)
     ports:
-    - 127.0.0.1:8090:8090  # Bind to localhost only for health checks
+    - 127.0.0.1:9902:8090  # Bind to localhost only for health checks
     volumes:
     - ./core/organizations:/app/organizations:ro
     - ./core/config:/app/fabric-config:ro
@@ -1048,7 +1038,7 @@ services:
     - --web.enable-lifecycle
     - --web.enable-admin-api
     ports:
-    - 9091:9090
+    - 9901:9090
     volumes:
     - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
@@ -1090,7 +1080,7 @@ services:
       GF_LOG_MODE: console
       GF_LOG_LEVEL: info
     ports:
-    - 3000:3000
+    - 9300:3000
     volumes:
     - grafana_data:/var/lib/grafana
     - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro

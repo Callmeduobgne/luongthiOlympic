@@ -1,11 +1,9 @@
 # Build stage
 FROM golang:alpine AS builder
 
-# Configure DNS resolvers for reliable network access during build
-# Use public DNS servers (Google DNS, Cloudflare DNS)
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
-    echo "nameserver 8.8.4.4" >> /etc/resolv.conf && \
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
+# Build metadata
+LABEL maintainer="IBN Network Team"
+LABEL description="IBN Backend API - Blockchain traceability system"
 
 # Install build dependencies
 RUN apk add --no-cache git make ca-certificates
@@ -16,16 +14,21 @@ RUN go install github.com/swaggo/swag/cmd/swag@latest
 # Set working directory
 WORKDIR /app
 
-# Configure Go proxy - use direct mode to bypass proxy issues
-# If proxy.golang.org is not accessible, use direct mode
-ENV GOPROXY=direct
-ENV GOSUMDB=off
+# Configure Go proxy with fallback
+# Use proxy.golang.org first, fallback to direct if proxy fails
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
+ENV GOTIMEOUT=300s
 
 # Copy go mod files
 COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+# Download dependencies with retry mechanism
+# Retry up to 3 times with exponential backoff
+RUN for i in 1 2 3; do \
+        go mod download && break || \
+        (echo "Attempt $i failed, retrying..." && sleep $((i * 5))); \
+    done || (echo "All download attempts failed" && exit 1)
 
 # Copy source code
 COPY . .
@@ -41,8 +44,8 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o /app/bin/server .
 # Runtime stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
+# Install runtime dependencies
+RUN apk --no-cache add ca-certificates tzdata wget
 
 # Set timezone
 ENV TZ=Asia/Ho_Chi_Minh
