@@ -113,10 +113,15 @@ Backend sử dụng **Gateway Client** để gọi API Gateway, và API Gateway 
 │   Backend   │─────▶│ API Gateway  │─────▶│   Fabric    │
 │  (Port 9090)│      │ (Port 8080)  │      │  Network    │
 └─────────────┘      └──────────────┘      └─────────────┘
-     │                      │
-     │ Gateway Client       │ Fabric Gateway SDK
-     │ (HTTP Client)       │ (Direct Connection)
-     └──────────────────────┘
+     │    ▲                 │
+     │    │ (gRPC Events)   │ Fabric Gateway SDK
+     │    └─────────────────┼──────────────────────┐
+     │                      │                      │
+     │ Gateway Client       │                      ▼
+     │ (HTTP Client)        │               ┌─────────────┐
+     └──────────────────────┘               │ Fabric Peer │
+                                            │ (Event Src) │
+                                            └─────────────┘
 ```
 
 **Lý do thiết kế:**
@@ -125,6 +130,7 @@ Backend sử dụng **Gateway Client** để gọi API Gateway, và API Gateway 
 - ✅ **Scalability:** Gateway có thể scale độc lập với Backend
 - ✅ **Consistency:** Tất cả blockchain operations đi qua một điểm
 - ✅ **Separation of Concerns:** Backend tập trung business logic, Gateway xử lý blockchain
+- ✅ **Real-time Sync:** Backend Listener kết nối trực tiếp Peer qua gRPC để nhận Block Events
 
 **Gateway Client Implementation:**
 - **Location:** `backend/internal/infrastructure/gateway/client.go`

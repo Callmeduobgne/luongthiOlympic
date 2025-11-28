@@ -60,14 +60,14 @@ export const API_ENDPOINTS = {
     CHANNEL_INFO: '/api/v1/blockchain/channel/info',
   },
   NETWORK: {
-    // Backend only has /api/v1/network/logs
-    // Other endpoints use blockchain/channel/info as fallback
-    INFO: '/api/v1/blockchain/channel/info', // Use blockchain channel info
-    CHANNELS: '/api/v1/blockchain/channel/info', // Use blockchain channel info
-    CHANNEL_INFO: (_name: string) => `/api/v1/blockchain/channel/info`, // Use blockchain channel info
-    PEERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
-    ORDERERS: '/api/v1/blockchain/channel/info', // Placeholder - parse from channel info
-    LOGS: '/api/v1/network/logs', // Backend has this endpoint
+    // Backend network endpoints (via Gateway)
+    INFO: '/api/v1/network/info', // Network overview (channels, peers, orderers, MSPs)
+    CHANNELS: '/api/v1/network/channels', // List all channels
+    CHANNEL_INFO: (name: string) => `/api/v1/network/channels/${name}`, // Get channel info by name
+    PEERS: '/api/v1/network/peers', // List all peers
+    ORDERERS: '/api/v1/network/orderers', // List all orderers
+    TOPOLOGY: '/api/v1/network/topology', // Network topology
+    LOGS: '/api/v1/network/logs', // Network logs from Loki
   },
   BATCHES: {
     // Backend uses /api/v1/teatrace/batches

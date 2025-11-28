@@ -40,6 +40,9 @@ import (
 	blockchainDB "github.com/ibn-network/backend/internal/services/blockchain/db"
 	blockchainInfo "github.com/ibn-network/backend/internal/services/blockchain/info"
 	teatraceService "github.com/ibn-network/backend/internal/services/teatrace"
+	networkService "github.com/ibn-network/backend/internal/services/network"
+	"github.com/ibn-network/backend/internal/services/blockchain/listener"
+	networkHandler "github.com/ibn-network/backend/internal/handlers/network"
 	"github.com/ibn-network/backend/internal/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
@@ -130,14 +133,29 @@ func main() {
 	// Initialize blockchain DB service
 	blockchainDBService := blockchainDB.NewService(dbPool.Primary(), logger)
 
+	// Initialize network services
+	networkLogsService := networkService.NewService(cfg.Loki.BaseURL, logger)
+	networkDiscoveryService := networkService.NewDiscoveryService(gatewayClient, logger)
+
+	// Initialize and start Blockchain Listener
+	listenerService := listener.NewService(&cfg.Fabric, blockchainDBService, logger)
+	// Start in background to avoid blocking startup if peer is down
+	go func() {
+		if err := listenerService.Start(context.Background()); err != nil {
+			logger.Error("Failed to start blockchain listener", zap.Error(err))
+		}
+	}()
+	defer listenerService.Stop()
+
 	// Initialize handlers
 	authHandlerInstance := authHandler.NewHandler(authService, logger)
 	teatraceHandlerInstance := teatraceHandler.NewHandler(teatraceService, logger)
 	metricsHandlerInstance := metricsHandler.NewHandler(metricsService, logger)
 	dashboardHandlerInstance := dashboardHandler.NewHandler(metricsService, blockchainInfoService, authService, logger)
+	networkHandlerInstance := networkHandler.NewHandler(networkLogsService, networkDiscoveryService, logger)
 
 	// Setup routes
-	router := setupRoutes(cfg, authHandlerInstance, teatraceHandlerInstance, metricsHandlerInstance, dashboardHandlerInstance, blockchainInfoService, blockchainDBService, authService, logger)
+	router := setupRoutes(cfg, authHandlerInstance, teatraceHandlerInstance, metricsHandlerInstance, dashboardHandlerInstance, networkHandlerInstance, blockchainInfoService, blockchainDBService, authService, logger)
 
 	// Create HTTP server
 	addr := cfg.Server.Address()
@@ -182,6 +200,7 @@ func setupRoutes(
 	teatraceHandler *teatraceHandler.Handler,
 	metricsHandler *metricsHandler.Handler,
 	dashboardHandler *dashboardHandler.Handler,
+	networkHandler *networkHandler.Handler,
 	blockchainInfoService *blockchainInfo.ServiceViaGateway,
 	blockchainDBService *blockchainDB.Service,
 	authService *auth.Service,
@@ -301,6 +320,25 @@ func setupRoutes(
 			r.Get("/snapshot", metricsHandler.GetSnapshot)
 			r.Get("/aggregations", metricsHandler.GetAggregations)
 			r.Get("/by-name", metricsHandler.GetMetricByName)
+		})
+
+		// Network routes (requires authentication)
+		r.Group(func(r chi.Router) {
+			authMW := authMiddleware.NewAuthMiddleware(authService, logger)
+			r.Use(authMW.Authenticate)
+
+			r.Route("/network", func(r chi.Router) {
+				// Network discovery endpoints
+				r.Get("/info", networkHandler.GetNetworkInfo)
+				r.Get("/peers", networkHandler.ListPeers)
+				r.Get("/orderers", networkHandler.ListOrderers)
+				r.Get("/channels", networkHandler.ListChannels)
+				r.Get("/channels/{name}", networkHandler.GetChannelInfo)
+				r.Get("/topology", networkHandler.GetTopology)
+				
+				// Network logs endpoint
+				r.Get("/logs", networkHandler.GetLogs)
+			})
 		})
 
 		// Dashboard WebSocket (requires authentication via WebSocket message)

@@ -19,21 +19,24 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/ibn-network/backend/internal/services/network"
 	"go.uber.org/zap"
 )
 
 // Handler handles network-related HTTP requests
 type Handler struct {
-	service *network.Service
-	logger  *zap.Logger
+	logsService      *network.Service
+	discoveryService *network.DiscoveryService
+	logger           *zap.Logger
 }
 
 // NewHandler creates a new network handler
-func NewHandler(service *network.Service, logger *zap.Logger) *Handler {
+func NewHandler(logsService *network.Service, discoveryService *network.DiscoveryService, logger *zap.Logger) *Handler {
 	return &Handler{
-		service: service,
-		logger:  logger,
+		logsService:      logsService,
+		discoveryService: discoveryService,
+		logger:           logger,
 	}
 }
 
@@ -81,7 +84,7 @@ func (h *Handler) GetLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	
 	// Query logs
-	logs, err := h.service.QueryLogs(r.Context(), req)
+	logs, err := h.logsService.QueryLogs(r.Context(), req)
 	if err != nil {
 		h.logger.Error("Failed to query logs", zap.Error(err))
 		w.Header().Set("Content-Type", "application/json")
@@ -104,4 +107,212 @@ func (h *Handler) GetLogs(w http.ResponseWriter, r *http.Request) {
 		"count":   len(logs),
 	})
 }
+
+// GetNetworkInfo handles GET /api/v1/network/info
+// @Summary Get network information
+// @Description Get overall network information (channels, peers, orderers, MSPs)
+// @Tags network
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Network info response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/info [get]
+// @Security BearerAuth
+func (h *Handler) GetNetworkInfo(w http.ResponseWriter, r *http.Request) {
+	info, err := h.discoveryService.GetNetworkInfo(r.Context())
+	if err != nil {
+		h.logger.Error("Failed to get network info", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "GET_NETWORK_INFO_FAILED",
+				"message": "Failed to get network info from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    info,
+	})
+}
+
+// ListPeers handles GET /api/v1/network/peers
+// @Summary List all peers
+// @Description List all peers in the network
+// @Tags network
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Peers response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/peers [get]
+// @Security BearerAuth
+func (h *Handler) ListPeers(w http.ResponseWriter, r *http.Request) {
+	peers, err := h.discoveryService.ListPeers(r.Context())
+	if err != nil {
+		h.logger.Error("Failed to list peers", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "LIST_PEERS_FAILED",
+				"message": "Failed to list peers from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    peers,
+	})
+}
+
+// ListOrderers handles GET /api/v1/network/orderers
+// @Summary List all orderers
+// @Description List all orderers in the network
+// @Tags network
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Orderers response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/orderers [get]
+// @Security BearerAuth
+func (h *Handler) ListOrderers(w http.ResponseWriter, r *http.Request) {
+	orderers, err := h.discoveryService.ListOrderers(r.Context())
+	if err != nil {
+		h.logger.Error("Failed to list orderers", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "LIST_ORDERERS_FAILED",
+				"message": "Failed to list orderers from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    orderers,
+	})
+}
+
+// ListChannels handles GET /api/v1/network/channels
+// @Summary List all channels
+// @Description List all channels in the network
+// @Tags network
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Channels response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/channels [get]
+// @Security BearerAuth
+func (h *Handler) ListChannels(w http.ResponseWriter, r *http.Request) {
+	channels, err := h.discoveryService.ListChannels(r.Context())
+	if err != nil {
+		h.logger.Error("Failed to list channels", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "LIST_CHANNELS_FAILED",
+				"message": "Failed to list channels from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    channels,
+	})
+}
+
+// GetChannelInfo handles GET /api/v1/network/channels/{name}
+// @Summary Get channel information
+// @Description Get detailed information about a specific channel
+// @Tags network
+// @Produce json
+// @Param name path string true "Channel name"
+// @Success 200 {object} map[string]interface{} "Channel info response"
+// @Failure 404 {object} map[string]interface{} "Channel not found"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/channels/{name} [get]
+// @Security BearerAuth
+func (h *Handler) GetChannelInfo(w http.ResponseWriter, r *http.Request) {
+	channelName := chi.URLParam(r, "name")
+	if channelName == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "INVALID_CHANNEL_NAME",
+				"message": "Channel name is required",
+			},
+		})
+		return
+	}
+
+	channelInfo, err := h.discoveryService.GetChannelInfo(r.Context(), channelName)
+	if err != nil {
+		h.logger.Error("Failed to get channel info", zap.Error(err), zap.String("channel", channelName))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "GET_CHANNEL_INFO_FAILED",
+				"message": "Failed to get channel info from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    channelInfo,
+	})
+}
+
+// GetTopology handles GET /api/v1/network/topology
+// @Summary Get network topology
+// @Description Get complete network topology (peers, orderers, CAs, channels, MSPs)
+// @Tags network
+// @Produce json
+// @Success 200 {object} map[string]interface{} "Topology response"
+// @Failure 500 {object} map[string]interface{} "Internal server error"
+// @Router /api/v1/network/topology [get]
+// @Security BearerAuth
+func (h *Handler) GetTopology(w http.ResponseWriter, r *http.Request) {
+	topology, err := h.discoveryService.GetTopology(r.Context())
+	if err != nil {
+		h.logger.Error("Failed to get topology", zap.Error(err))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]interface{}{
+				"code":    "GET_TOPOLOGY_FAILED",
+				"message": "Failed to get topology from Gateway",
+				"details": err.Error(),
+			},
+		})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"success": true,
+		"data":    topology,
+	})
+}
+
 

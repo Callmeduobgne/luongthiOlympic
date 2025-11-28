@@ -327,6 +327,20 @@ API Gateway kết nối với Core Blockchain Layer thông qua:
 - **Certificates** - TLS và MSP certificates
 - **Channel** - ibnchannel
 - **Chaincode** - teaTraceCC
+- **Event Listening** - Direct gRPC connection to Peer for Block Events
+
+### Event Listening Architecture
+
+Backend sử dụng **Blockchain Listener Service** để đồng bộ dữ liệu real-time:
+1.  **Connection:** gRPC trực tiếp đến Peer (e.g., `peer0.org1.ibn.vn:7051`)
+2.  **Protocol:** Fabric Gateway Block Events
+3.  **Data Flow:**
+    -   Peer commit block mới
+    -   Listener nhận event
+    -   Extract transactions
+    -   Sync vào PostgreSQL
+4.  **Security:** Sử dụng TLS Certificate và Admin Identity
+
 
 ---
 

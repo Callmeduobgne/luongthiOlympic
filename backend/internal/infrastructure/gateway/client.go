@@ -376,3 +376,37 @@ func (c *Client) Post(ctx context.Context, path string, body interface{}) ([]byt
 
 	return respBody, nil
 }
+
+// Get performs a generic GET request to Gateway
+func (c *Client) Get(ctx context.Context, path string) ([]byte, error) {
+	url := fmt.Sprintf("%s%s", c.baseURL, path)
+
+	httpReq, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Priority: API Key (from env) > JWT Token (from context)
+	if c.apiKey != "" {
+		httpReq.Header.Set("X-API-Key", c.apiKey)
+	} else if token, ok := ctx.Value("jwt_token").(string); ok && token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("gateway API call failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return respBody, nil
+}

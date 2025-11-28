@@ -105,3 +105,4 @@ core/organizations/**/users/**/msp/signcerts/
 # */server
 # */main
 
+.agent/

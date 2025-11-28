@@ -52,43 +52,54 @@ const normalizeOrderer = (orderer: any): OrdererInfo => ({
 
 export const networkService = {
   async getOverview(): Promise<NetworkOverview> {
-    const response = await api.get<ApiResponse<any>>(API_ENDPOINTS.NETWORK.INFO)
-    const payload = response.data?.data || {}
+    // Backend now has proper /api/v1/network/info endpoint via Gateway
+    const response = await api.get<ApiResponse<NetworkOverview>>(API_ENDPOINTS.NETWORK.INFO)
+    const data = response.data?.data
 
-    const channels = Array.isArray(payload.channels) ? payload.channels.map(normalizeChannel) : []
-    const peers = Array.isArray(payload.peers) ? payload.peers.map(normalizePeer) : []
-    const orderers = Array.isArray(payload.orderers) ? payload.orderers.map(normalizeOrderer) : []
-    const msps = Array.isArray(payload.msps) ? payload.msps : []
+    if (!data) {
+      // Fallback to empty data if response is invalid
+      return {
+        channels: [],
+        peers: [],
+        orderers: [],
+        msps: [],
+      }
+    }
 
+    // Normalize data from Gateway response
     return {
-      channels,
-      peers,
-      orderers,
-      msps,
+      channels: Array.isArray(data.channels) ? data.channels.map(normalizeChannel) : [],
+      peers: Array.isArray(data.peers) ? data.peers.map(normalizePeer) : [],
+      orderers: Array.isArray(data.orderers) ? data.orderers.map(normalizeOrderer) : [],
+      msps: Array.isArray(data.msps) ? data.msps : [],
     }
   },
 
   async listPeers(): Promise<PeerInfo[]> {
-    const response = await api.get<ApiResponse<any[]>>(API_ENDPOINTS.NETWORK.PEERS)
+    // Backend has /api/v1/network/peers endpoint via Gateway
+    const response = await api.get<ApiResponse<PeerInfo[]>>(API_ENDPOINTS.NETWORK.PEERS)
     const peers = Array.isArray(response.data?.data) ? response.data.data : []
     return peers.map(normalizePeer)
   },
 
   async listOrderers(): Promise<OrdererInfo[]> {
-    const response = await api.get<ApiResponse<any[]>>(API_ENDPOINTS.NETWORK.ORDERERS)
+    // Backend has /api/v1/network/orderers endpoint via Gateway
+    const response = await api.get<ApiResponse<OrdererInfo[]>>(API_ENDPOINTS.NETWORK.ORDERERS)
     const orderers = Array.isArray(response.data?.data) ? response.data.data : []
     return orderers.map(normalizeOrderer)
   },
 
   async listChannels(): Promise<ChannelInfo[]> {
-    const response = await api.get<ApiResponse<any[]>>(API_ENDPOINTS.NETWORK.CHANNELS)
+    // Backend has /api/v1/network/channels endpoint via Gateway
+    const response = await api.get<ApiResponse<ChannelInfo[]>>(API_ENDPOINTS.NETWORK.CHANNELS)
     const channels = Array.isArray(response.data?.data) ? response.data.data : []
     return channels.map(normalizeChannel)
   },
 
   async getChannelInfo(name: string): Promise<ChannelInfo> {
-    const response = await api.get<ApiResponse<any>>(API_ENDPOINTS.NETWORK.CHANNEL_INFO(name))
-    return normalizeChannel(response.data?.data)
+    // Backend has /api/v1/network/channels/{name} endpoint via Gateway
+    const response = await api.get<ApiResponse<ChannelInfo>>(API_ENDPOINTS.NETWORK.CHANNEL_INFO(name))
+    return normalizeChannel(response.data?.data || {})
   },
 }
 

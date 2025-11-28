@@ -20,6 +20,7 @@ type Transaction struct {
 	BlockNumber   uint64    `json:"blockNumber"`
 	BlockHash     string    `json:"blockHash"`
 	Timestamp     time.Time `json:"timestamp"`
+	Args          []string  `json:"args"`
 }
 
 // BlockInfo represents block information from DB
@@ -203,4 +204,24 @@ func (s *Service) ListBatches(ctx context.Context, limit, offset int) ([]Batch, 
 	}
 	
 	return batches, total, nil
+}
+
+// SaveTransaction saves a transaction to the database
+func (s *Service) SaveTransaction(ctx context.Context, tx *Transaction) error {
+	argsJSON, _ := json.Marshal(tx.Args)
+	
+	_, err := s.db.Exec(ctx, `
+		INSERT INTO transactions (
+			tx_id, channel_name, chaincode_name, function_name, 
+			status, block_number, block_hash, timestamp, args
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		ON CONFLICT (tx_id) DO NOTHING
+	`, tx.TxID, tx.ChannelName, tx.ChaincodeName, tx.FunctionName, 
+	   tx.Status, tx.BlockNumber, tx.BlockHash, tx.Timestamp, argsJSON)
+	
+	if err != nil {
+		s.logger.Error("Failed to save transaction", zap.Error(err))
+		return err
+	}
+	return nil
 }
