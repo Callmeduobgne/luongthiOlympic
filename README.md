@@ -111,10 +111,10 @@ docker-compose up -d
 
 ```bash
 # Xem tất cả containers
-docker-compose ps
+docker compose ps
 
 # Xem logs
-docker-compose logs -f
+docker compose logs -f
 
 # Health check
 curl http://localhost:9090/health | jq '.'
