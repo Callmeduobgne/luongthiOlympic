@@ -51,7 +51,15 @@ export const CreateBatchForm = () => {
 
   const onSubmit = async (data: CreateBatchFormData) => {
     try {
-      const result = await createBatch.mutateAsync(data)
+      // Transform form data to match backend API
+      const apiData = {
+        batch_id: data.batchId,
+        farm_name: data.farmLocation,
+        harvest_date: data.harvestDate,
+        certification: data.processingInfo, // Using processingInfo as certification
+        certificate_id: data.qualityCert,
+      }
+      const result = await createBatch.mutateAsync(apiData)
       navigate(`/supply-chain/${result.batchId}`)
     } catch {
       // Error handling is done in the mutation

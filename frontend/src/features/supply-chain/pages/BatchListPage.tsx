@@ -21,27 +21,30 @@ import { Input } from '@shared/components/ui/Input'
 import { BatchCard } from '../components/BatchCard'
 import { EmptyState } from '@shared/components/common/EmptyState'
 import { LoadingState } from '@shared/components/common/LoadingState'
-import { useBatch } from '../hooks/useBatches'
-import { useDebounce } from '@shared/hooks/useDebounce'
+import { useAllBatches } from '../hooks/useBatches'
 import { useNavigate } from 'react-router-dom'
 
 export const BatchListPage = () => {
   const navigate = useNavigate()
   const [searchId, setSearchId] = useState('')
-  const debouncedSearchId = useDebounce(searchId, 500)
 
-  // Query batch by ID if search ID is provided
+  // Fetch all batches
   const {
-    data: batch,
+    data: allBatches,
     isLoading,
     error,
-  } = useBatch(debouncedSearchId)
+  } = useAllBatches()
 
   const handleCreate = () => {
     navigate('/supply-chain/create')
   }
 
-  const batches = batch ? [batch] : []
+  // Filter batches by search ID
+  const batches = searchId
+    ? (allBatches || []).filter((batch) =>
+      batch.batchId?.toLowerCase().includes(searchId.toLowerCase())
+    )
+    : allBatches || []
 
   return (
     <div className="space-y-6 text-white">
@@ -75,17 +78,13 @@ export const BatchListPage = () => {
       </div>
 
       {/* Results */}
-      {isLoading && <LoadingState text="Searching batch..." />}
+      {isLoading && <LoadingState text="Loading batches..." />}
 
       {error && !isLoading && (
         <EmptyState
           icon="search"
-          title="Batch not found"
-          description={
-            searchId
-              ? `No batch found with ID: ${searchId}`
-              : 'Enter a Batch ID to search'
-          }
+          title="Failed to load batches"
+          description="Unable to fetch batches. Please try again later."
         />
       )}
 
@@ -97,11 +96,15 @@ export const BatchListPage = () => {
         </div>
       )}
 
-      {!isLoading && !error && batches.length === 0 && !searchId && (
+      {!isLoading && !error && batches.length === 0 && (
         <EmptyState
           icon="package"
-          title="No batches found"
-          description="Search for a batch by ID or create a new batch"
+          title={searchId ? "No batches found" : "No batches yet"}
+          description={
+            searchId
+              ? `No batch found matching: ${searchId}`
+              : "Create your first batch to get started"
+          }
           action={{
             label: 'Create Batch',
             onClick: handleCreate,
@@ -111,4 +114,5 @@ export const BatchListPage = () => {
     </div>
   )
 }
+
 

@@ -27,6 +27,7 @@ import {
   Code,
   QrCode,
   Radio,
+  Package,
 } from 'lucide-react'
 import { authService } from '@features/authentication/services/authService'
 import { useNavigate } from 'react-router-dom'
@@ -53,6 +54,11 @@ const navItems: NavItem[] = [
     label: 'Dashboard',
     path: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    label: 'Supply Chain',
+    path: '/supply-chain',
+    icon: Package,
   },
   {
     label: 'Deploy Chaincode',

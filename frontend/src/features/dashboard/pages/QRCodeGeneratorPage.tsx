@@ -71,7 +71,8 @@ export const QRCodeGeneratorPage = () => {
     queryFn: async () => {
       try {
         const response = await api.get('/api/v1/blockchain/transactions?limit=100')
-        const transactions = response.data?.data || []
+        const responseData = response.data?.data
+        const transactions = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
 
         const packageTransactions = transactions.filter((tx: Transaction) =>
           tx.function_name === 'CreatePackage' || tx.function_name === 'createPackage'
@@ -103,7 +104,8 @@ export const QRCodeGeneratorPage = () => {
     queryFn: async () => {
       try {
         const response = await api.get('/api/v1/blockchain/transactions?limit=50')
-        const data = response.data?.data || []
+        const responseData = response.data?.data
+        const data = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
 
         // Map backend format (camelCase) to frontend format (snake_case)
         return data.map((tx: any) => ({

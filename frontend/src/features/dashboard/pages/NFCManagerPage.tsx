@@ -44,7 +44,8 @@ export const NFCManagerPage = () => {
         queryFn: async () => {
             try {
                 const response = await api.get('/api/v1/blockchain/transactions?limit=50')
-                const data = response.data?.data || []
+                const responseData = response.data?.data
+                const data = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
 
                 return data.map((tx: any) => ({
                     tx_id: tx.txId || tx.tx_id || '',

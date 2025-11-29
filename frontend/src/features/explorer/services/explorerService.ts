@@ -53,7 +53,8 @@ export const explorerService = {
         }
       )
 
-      const transactions = transactionsResponse.data?.data || []
+      const responseData = transactionsResponse.data?.data
+      const transactions = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
 
       // 3. Group transactions theo block_number để tính transactionCount
       const blockTxCountMap = new Map<number, number>()
@@ -129,7 +130,8 @@ export const explorerService = {
         }
       )
 
-      const transactions = response.data?.data || []
+      const responseData = response.data?.data
+      const transactions = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
 
       if (!Array.isArray(transactions) || transactions.length === 0) {
         return {

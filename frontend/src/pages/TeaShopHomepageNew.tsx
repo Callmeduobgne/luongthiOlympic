@@ -15,7 +15,7 @@
  */
 
 import { Link, useNavigate } from 'react-router-dom'
-import { Shield, Leaf, QrCode, ChevronRight, CheckCircle, Hash, Radio, ArrowLeft, Camera, X, Lock, Eye, Sparkles, TrendingUp } from 'lucide-react'
+import { Shield, Leaf, QrCode, ChevronRight, CheckCircle, Hash, Radio, ArrowLeft, Camera, X, Lock, Eye, Sparkles, TrendingUp, Box, Layers, Hexagon, Menu } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { HomeHeader } from '@shared/components/layout/HomeHeader'
 import { authService } from '@features/authentication/services/authService'
@@ -30,6 +30,7 @@ export function TeaShopHomepage() {
     const navigate = useNavigate()
     const [showVerificationModal, setShowVerificationModal] = useState(false)
     const [selectedMethod, setSelectedMethod] = useState<VerificationMethod>(null)
+    const [showMobileMenu, setShowMobileMenu] = useState(false)
 
     const [hash, setHash] = useState('')
     const [isScanning, setIsScanning] = useState(false)
@@ -220,16 +221,70 @@ export function TeaShopHomepage() {
                                         Ibn tea
                                     </span>
                                 </div>
+
+                                {/* Desktop Menu */}
                                 <div className="hidden md:flex items-center gap-8">
                                     <a href="#technology" className="text-gray-700 hover:text-green-600 transition-colors font-medium">Công nghệ</a>
-                                    <a href="#journey" className="text-gray-700 hover:text-green-600 transition-colors font-medium">Hành trình</a>
+                                    <a href="#journey" className="text-gray-700 hover:text-green-600 transition-colors font-medium">Câu Chuyện Cây Chè</a>
                                     <a href="#transparency" className="text-gray-700 hover:text-green-600 transition-colors font-medium">Minh bạch</a>
                                     <Link to="/login" className="px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-full hover:shadow-lg transition-all">
                                         Đăng Nhập
                                     </Link>
                                 </div>
+
+                                {/* Mobile Menu Button */}
+                                <button
+                                    onClick={() => setShowMobileMenu(!showMobileMenu)}
+                                    className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                                >
+                                    {showMobileMenu ? (
+                                        <X className="h-6 w-6 text-gray-600" />
+                                    ) : (
+                                        <Menu className="h-6 w-6 text-gray-600" />
+                                    )}
+                                </button>
                             </div>
                         </div>
+
+                        {/* Mobile Menu Dropdown */}
+                        {showMobileMenu && (
+                            <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 shadow-lg">
+                                <div className="flex flex-col gap-4">
+                                    <a
+                                        href="#technology"
+                                        onClick={() => setShowMobileMenu(false)}
+                                        className="text-gray-700 hover:text-green-600 font-medium py-2"
+                                    >
+                                        Công nghệ
+                                    </a>
+                                    <a
+                                        href="#journey"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setShowMobileMenu(false);
+                                            document.getElementById('journey')?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        className="text-gray-700 hover:text-green-600 font-medium py-2"
+                                    >
+                                        Câu Chuyện Cây Chè
+                                    </a>
+                                    <a
+                                        href="#transparency"
+                                        onClick={() => setShowMobileMenu(false)}
+                                        className="text-gray-700 hover:text-green-600 font-medium py-2"
+                                    >
+                                        Minh bạch
+                                    </a>
+                                    <Link
+                                        to="/login"
+                                        onClick={() => setShowMobileMenu(false)}
+                                        className="px-6 py-2 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-full hover:shadow-lg transition-all text-center"
+                                    >
+                                        Đăng Nhập
+                                    </Link>
+                                </div>
+                            </div>
+                        )}
                     </nav>
                 )}
 
@@ -240,22 +295,21 @@ export function TeaShopHomepage() {
                             {/* Badge */}
                             <div className="inline-flex items-center gap-2 px-6 py-3 bg-white/90 backdrop-blur-sm rounded-full shadow-lg">
                                 <Sparkles className="w-5 h-5 text-green-600" />
-                                <span className="text-sm font-bold text-gray-900">Công nghệ Blockchain xác thực nguồn gốc</span>
+                                <span className="text-sm font-bold text-gray-900">Công nghệ Blockchain kiến tạo niềm tin</span>
                             </div>
 
                             {/* Main Heading */}
-                            <h1 className="text-5xl md:text-7xl font-bold leading-tight">
+                            <h1 className="text-4xl md:text-7xl font-bold leading-tight">
                                 <span className="text-gray-900 drop-shadow-lg">Minh Bạch</span>
                                 <br />
                                 <span className="bg-gradient-to-r from-green-600 to-emerald-700 bg-clip-text text-transparent drop-shadow-sm">
-                                    Từng Bước Chân
+                                    Từng Búp Trà
                                 </span>
                             </h1>
 
                             {/* Subtitle */}
                             <p className="text-xl md:text-2xl text-gray-800 drop-shadow-sm max-w-3xl mx-auto leading-relaxed font-medium">
-                                Mỗi sản phẩm chè của chúng tôi được ghi nhận trên blockchain,
-                                đảm bảo tính minh bạch tuyệt đối từ vườn chè đến tay bạn.
+                                Từ đồi chè hữu cơ đến tách trà trên tay bạn, mọi hành trình đều được khắc ghi vĩnh cửu trên Blockchain. Thưởng thức hương vị thuần khiết với sự an tâm tuyệt đối
                             </p>
 
                             {/* CTA Buttons */}
@@ -265,30 +319,34 @@ export function TeaShopHomepage() {
                                     className="group px-8 py-4 bg-gradient-to-r from-green-600 to-emerald-700 text-white rounded-full font-bold hover:shadow-2xl transition-all flex items-center gap-3 text-lg"
                                 >
                                     <QrCode className="w-6 h-6" />
-                                    Xác Thực Sản Phẩm
+                                    Quét Mã Xác Thực
                                     <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                                 </button>
                                 <a
-                                    href="#technology"
+                                    href="#journey"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        document.getElementById('journey')?.scrollIntoView({ behavior: 'smooth' });
+                                    }}
                                     className="px-8 py-4 bg-white/90 backdrop-blur-sm border-2 border-gray-300 text-gray-900 rounded-full font-bold hover:bg-white hover:border-green-600 transition-all flex items-center gap-2 text-lg"
                                 >
-                                    Tìm Hiểu Thêm
+                                    Câu Chuyện Cây Chè
                                 </a>
                             </div>
 
                             {/* Trust Indicators */}
-                            <div className="grid grid-cols-3 gap-8 pt-12 max-w-2xl mx-auto">
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-12 max-w-2xl mx-auto">
                                 <div className="text-center">
                                     <div className="text-4xl font-bold text-gray-900 drop-shadow-sm mb-2">100%</div>
                                     <div className="text-sm text-gray-700 font-medium drop-shadow-sm">Minh Bạch</div>
                                 </div>
                                 <div className="text-center">
                                     <div className="text-4xl font-bold text-gray-900 drop-shadow-sm mb-2">24/7</div>
-                                    <div className="text-sm text-gray-700 font-medium drop-shadow-sm">Truy Xuất</div>
+                                    <div className="text-sm text-gray-700 font-medium drop-shadow-sm">Đổi thành Truy Xuất 1 Chạm</div>
                                 </div>
                                 <div className="text-center">
                                     <div className="text-4xl font-bold text-gray-900 drop-shadow-sm mb-2">∞</div>
-                                    <div className="text-sm text-gray-700 font-medium drop-shadow-sm">Bảo Mật</div>
+                                    <div className="text-sm text-gray-700 font-medium drop-shadow-sm">Không Thể Giả Mạo</div>
                                 </div>
                             </div>
                         </div>
@@ -315,12 +373,12 @@ export function TeaShopHomepage() {
                                 {/* Shine effect */}
                                 <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                                 <div className="relative">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-green-600 to-emerald-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg">
-                                        <Lock className="w-8 h-8 text-white" />
+                                    <div className="w-16 h-16 bg-white/5 border border-white/20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg backdrop-blur-md">
+                                        <Box className="w-8 h-8 text-white stroke-[1.5]" />
                                     </div>
-                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Bất Biến</h3>
-                                    <p className="text-gray-700 leading-relaxed font-['Pacifico']">
-                                        Dữ liệu được mã hóa và lưu trữ vĩnh viễn trên blockchain, không thể thay đổi hay xóa bỏ.
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Cam Kết Vàng</h3>
+                                    <p className="text-gray-700 leading-relaxed font-['Roboto']">
+                                        Lịch sử của búp chè được ghi lại vĩnh cửu. Một khi đã lưu trên Blockchain, không ai có thể sửa đổi hay tẩy xóa sự thật.
                                     </p>
                                 </div>
                             </div>
@@ -332,12 +390,12 @@ export function TeaShopHomepage() {
                                 {/* Shine effect */}
                                 <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                                 <div className="relative">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg">
-                                        <Eye className="w-8 h-8 text-white" />
+                                    <div className="w-16 h-16 bg-white/5 border border-white/20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg backdrop-blur-md">
+                                        <Layers className="w-8 h-8 text-white stroke-[1.5]" />
                                     </div>
-                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Minh Bạch</h3>
-                                    <p className="text-gray-700 leading-relaxed font-['Pacifico']">
-                                        Mọi thông tin về sản phẩm đều công khai, có thể kiểm chứng bất cứ lúc nào.
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Truy Xuất Nguồn Gốc</h3>
+                                    <p className="text-gray-700 leading-relaxed font-['Roboto']">
+                                        Không còn bí mật. Bạn có quyền biết chính xác chè được hái ở đâu, khi nào và bởi ai, chỉ với một cú chạm.
                                     </p>
                                 </div>
                             </div>
@@ -349,12 +407,12 @@ export function TeaShopHomepage() {
                                 {/* Shine effect */}
                                 <div className="absolute inset-0 bg-gradient-to-tr from-white/0 via-white/5 to-white/0 rounded-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-500"></div>
                                 <div className="relative">
-                                    <div className="w-16 h-16 bg-gradient-to-br from-purple-600 to-pink-700 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg">
-                                        <Shield className="w-8 h-8 text-white" />
+                                    <div className="w-16 h-16 bg-white/5 border border-white/20 rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 group-hover:rotate-3 transition-all duration-500 shadow-lg backdrop-blur-md">
+                                        <Hexagon className="w-8 h-8 text-white stroke-[1.5]" />
                                     </div>
-                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Bảo Mật</h3>
-                                    <p className="text-gray-700 leading-relaxed font-['Pacifico']">
-                                        Hệ thống mã hóa tiên tiến đảm bảo an toàn tuyệt đối cho mọi giao dịch.
+                                    <h3 className="text-2xl font-bold text-gray-900 mb-4">Chống Giả Tuyệt Đối</h3>
+                                    <p className="text-gray-700 leading-relaxed font-['Roboto']">
+                                        Mỗi hộp trà là độc nhất. Công nghệ mã hóa bảo vệ bạn hoàn toàn trước nguy cơ hàng giả, hàng kém chất lượng.
                                     </p>
                                 </div>
                             </div>
@@ -445,8 +503,11 @@ export function TeaShopHomepage() {
                                 </svg>
                             </div>
 
+                            {/* Mobile Vertical Line */}
+                            <div className="absolute left-1/2 transform -translate-x-1/2 top-0 bottom-0 w-1 bg-green-200 md:hidden"></div>
+
                             {/* Journey Steps */}
-                            <div className="space-y-24 relative z-10">
+                            <div className="space-y-12 md:space-y-24 relative z-10">
                                 {[
                                     {
                                         step: '01',
@@ -477,7 +538,7 @@ export function TeaShopHomepage() {
                                         color: 'from-amber-600 to-orange-700'
                                     },
                                 ].map((item, index) => (
-                                    <div key={index} className={`flex items-center gap-8 ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
+                                    <div key={index} className={`flex flex-col-reverse items-center gap-8 ${index % 2 === 0 ? 'md:flex-row' : 'md:flex-row-reverse'}`}>
                                         {/* Content */}
                                         <div className={`flex-1 ${index % 2 === 0 ? 'md:text-right' : 'md:text-left'}`}>
                                             <div className="relative">
@@ -493,7 +554,7 @@ export function TeaShopHomepage() {
 
                                                     <div className="text-sm font-bold text-green-600 mb-2">BƯỚC {item.step}</div>
                                                     <h3 className="text-2xl font-bold text-gray-900 mb-3">{item.title}</h3>
-                                                    <p className="text-gray-600 leading-loose font-['Pacifico'] text-center">{item.description}</p>
+                                                    <p className="text-gray-600 leading-loose font-['Roboto'] text-center">{item.description}</p>
                                                 </motion.div>
 
                                                 {/* Roller Effect - The "carpet roll" */}
@@ -546,7 +607,7 @@ export function TeaShopHomepage() {
                                         Cam Kết Của Chúng Tôi
                                     </span>
                                 </h2>
-                                <p className="text-xl text-white/95 leading-relaxed font-['Pacifico'] drop-shadow-md">
+                                <p className="text-xl text-white/95 leading-relaxed font-['Roboto'] drop-shadow-md">
                                     Chúng tôi tin rằng người tiêu dùng có quyền biết chính xác nguồn gốc và chất lượng của sản phẩm họ sử dụng.
                                 </p>
 

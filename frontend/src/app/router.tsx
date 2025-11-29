@@ -27,6 +27,9 @@ import VerifyPackage from '@/pages/VerifyPackage'
 import VerifyHashPage from '@/pages/VerifyHashPage'
 import { QRCodeGeneratorPage } from '@features/dashboard/pages/QRCodeGeneratorPage'
 import { NFCManagerPage } from '@features/dashboard/pages/NFCManagerPage'
+import { BatchListPage } from '@features/supply-chain/pages/BatchListPage'
+import { CreateBatchForm } from '@features/supply-chain/components/CreateBatchForm'
+import { BatchDetailPage } from '@features/supply-chain/pages/BatchDetailPage'
 import { ProtectedRoute } from './ProtectedRoute'
 
 export const router = createBrowserRouter([
@@ -103,6 +106,30 @@ export const router = createBrowserRouter([
     element: (
       <ProtectedRoute>
         <NFCManagerPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/supply-chain',
+    element: (
+      <ProtectedRoute>
+        <BatchListPage />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/supply-chain/create',
+    element: (
+      <ProtectedRoute>
+        <CreateBatchForm />
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: '/supply-chain/:batchId',
+    element: (
+      <ProtectedRoute>
+        <BatchDetailPage />
       </ProtectedRoute>
     ),
   },

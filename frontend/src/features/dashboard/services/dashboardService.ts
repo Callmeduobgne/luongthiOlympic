@@ -69,28 +69,28 @@ export const dashboardService = {
       const response = await api.get<any>(
         `${API_ENDPOINTS.METRICS.SUMMARY}${channel ? `?channel=${channel}` : ''}`
       )
-      
+
       // Backend có thể trả về:
       // 1. { timestamp, metrics: {...} } (MetricSnapshot)
       // 2. { success: true, data: {...} }
       // 3. { data: {...} }
-      
+
       const snapshot = response.data?.data || response.data
       const metricsMap = snapshot?.metrics || {}
-      
+
       // Backend metrics service không có transaction metrics
       // Luôn lấy từ transactions thực tế để đảm bảo có dữ liệu
       // Chỉ dùng metrics map nếu có transaction metrics cụ thể
-      const hasTransactionMetrics = metricsMap['transaction_total'] || 
-                                    metricsMap['tx_total'] || 
-                                    metricsMap['transaction_valid'] ||
-                                    metricsMap['tx_valid']
-      
+      const hasTransactionMetrics = metricsMap['transaction_total'] ||
+        metricsMap['tx_total'] ||
+        metricsMap['transaction_valid'] ||
+        metricsMap['tx_valid']
+
       if (!hasTransactionMetrics) {
         // Luôn fallback sang transactions thực tế
         return await this.getMetricsFromTransactions()
       }
-      
+
       // Parse metrics map thành MetricsSummary (nếu có)
       return {
         transactions: {
@@ -132,9 +132,10 @@ export const dashboardService = {
       const response = await api.get<any>('/api/v1/blockchain/transactions', {
         params: { limit: 1000 }, // Lấy nhiều để tính toán chính xác
       })
-      
-      const transactions = response.data?.data || []
-      
+
+      const responseData = response.data?.data
+      const transactions = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
+
       if (!Array.isArray(transactions) || transactions.length === 0) {
         // Return empty metrics nếu không có transactions
         return {
@@ -163,47 +164,47 @@ export const dashboardService = {
           },
         }
       }
-      
+
       const now = new Date()
       const last24h = new Date(now.getTime() - 24 * 60 * 60 * 1000)
       const last7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
       const last30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-      
+
       const total = transactions.length
       // Backend trả về status: "VALID", "INVALID", "submitted", "pending", "committed", "failed", etc.
-      const valid = transactions.filter((tx: any) => 
-        tx.status === 'VALID' || 
-        tx.status === 'committed' || 
+      const valid = transactions.filter((tx: any) =>
+        tx.status === 'VALID' ||
+        tx.status === 'committed' ||
         tx.status === 'success' ||
         (tx.status && tx.status.toUpperCase() === 'VALID')
       ).length
-      const invalid = transactions.filter((tx: any) => 
-        tx.status === 'INVALID' || 
-        tx.status === 'failed' || 
+      const invalid = transactions.filter((tx: any) =>
+        tx.status === 'INVALID' ||
+        tx.status === 'failed' ||
         tx.status === 'error' ||
         (tx.status && tx.status.toUpperCase() === 'INVALID')
       ).length
-      const submitted = transactions.filter((tx: any) => 
-        tx.status === 'submitted' || 
+      const submitted = transactions.filter((tx: any) =>
+        tx.status === 'submitted' ||
         tx.status === 'pending' ||
         (tx.status && !['VALID', 'INVALID', 'committed', 'failed', 'success', 'error'].includes(tx.status))
       ).length
-      
+
       const last24hTxs = transactions.filter((tx: any) => {
         const txTime = new Date(tx.timestamp || tx.completed_at || tx.committed_at || tx.submitted_at || 0)
         return txTime >= last24h && !isNaN(txTime.getTime())
       })
-      
+
       const last7dTxs = transactions.filter((tx: any) => {
         const txTime = new Date(tx.timestamp || tx.completed_at || tx.committed_at || tx.submitted_at || 0)
         return txTime >= last7d && !isNaN(txTime.getTime())
       })
-      
+
       const last30dTxs = transactions.filter((tx: any) => {
         const txTime = new Date(tx.timestamp || tx.completed_at || tx.committed_at || tx.submitted_at || 0)
         return txTime >= last30d && !isNaN(txTime.getTime())
       })
-      
+
       // Tính average duration (nếu có)
       const durations = transactions
         .filter((tx: any) => tx.completed_at && tx.submitted_at)
@@ -212,10 +213,10 @@ export const dashboardService = {
           const submitted = new Date(tx.submitted_at).getTime()
           return completed - submitted
         })
-      const avgDuration = durations.length > 0 
-        ? durations.reduce((a: number, b: number) => a + b, 0) / durations.length 
+      const avgDuration = durations.length > 0
+        ? durations.reduce((a: number, b: number) => a + b, 0) / durations.length
         : 0
-      
+
       // Group by block_number để tính blocks
       const blockNumbers = new Set<number>()
       transactions.forEach((tx: any) => {
@@ -223,7 +224,7 @@ export const dashboardService = {
           blockNumbers.add(tx.block_number || tx.blockNumber)
         }
       })
-      
+
       return {
         transactions: {
           total,
@@ -292,20 +293,21 @@ export const dashboardService = {
           params: { limit: limit * 10 }, // Lấy nhiều transactions để có đủ blocks
         }
       )
-      
-      const transactions = response.data?.data || []
-      
+
+      const responseData = response.data?.data
+      const transactions = Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
+
       if (!Array.isArray(transactions) || transactions.length === 0) {
         return []
       }
-      
+
       // Group transactions theo block_number và tạo blocks
       const blockMap = new Map<number, Block>()
-      
+
       transactions.forEach((tx: any) => {
         const blockNumber = tx.block_number || tx.blockNumber
         if (!blockNumber) return
-        
+
         if (!blockMap.has(blockNumber)) {
           blockMap.set(blockNumber, {
             number: blockNumber,
@@ -316,17 +318,17 @@ export const dashboardService = {
             channel: tx.channel_name || tx.channelName || channel,
           })
         }
-        
+
         // Tăng transaction count
         const block = blockMap.get(blockNumber)!
         block.transactionCount = (block.transactionCount || 0) + 1
       })
-      
+
       // Convert map to array và sort theo block number (desc)
       const blocks = Array.from(blockMap.values())
         .sort((a, b) => b.number - a.number)
         .slice(0, limit)
-      
+
       return blocks
     } catch (error) {
       if (import.meta.env.DEV) {

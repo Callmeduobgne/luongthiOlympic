@@ -243,18 +243,18 @@ func (r *Repository) QueryTransactions(ctx context.Context, req *QueryTransactio
 	}
 
 	if req.StartDate != nil {
-		query += fmt.Sprintf(" AND submitted_at >= $%d", argPos)
+		query += fmt.Sprintf(" AND timestamp >= $%d", argPos)
 		args = append(args, *req.StartDate)
 		argPos++
 	}
 
 	if req.EndDate != nil {
-		query += fmt.Sprintf(" AND submitted_at <= $%d", argPos)
+		query += fmt.Sprintf(" AND timestamp <= $%d", argPos)
 		args = append(args, *req.EndDate)
 		argPos++
 	}
 
-	query += " ORDER BY COALESCE(submitted_at, created_at) DESC"
+	query += " ORDER BY COALESCE(timestamp, created_at) DESC"
 
 	if req.Limit > 0 {
 		query += fmt.Sprintf(" LIMIT $%d", argPos)

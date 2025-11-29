@@ -107,3 +107,13 @@ export function useVerifyBatch() {
   })
 }
 
+/**
+ * Get all batches
+ */
+export function useAllBatches() {
+  return useQuery({
+    queryKey: batchKeys.all,
+    queryFn: () => batchApi.getAllBatches(),
+    retry: 1,
+  })
+}

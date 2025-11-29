@@ -16,7 +16,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LogOut, User, LayoutDashboard } from 'lucide-react'
+import { LogOut, User, LayoutDashboard, Menu, X } from 'lucide-react'
 import { authService } from '@features/authentication/services/authService'
 import { ProfilePopup } from '@shared/components/common/ProfilePopup'
 import api from '@shared/utils/api'
@@ -42,14 +42,14 @@ export const HomeHeader = () => {
     if (isAuthenticated) {
       fetchUserInfo()
       fetchUserAvatar()
-      
+
       // Listen for avatar updates from ProfilePopup
       const handleAvatarUpdate = () => {
         fetchUserAvatar()
         fetchUserInfo()
       }
       window.addEventListener('avatarUpdated', handleAvatarUpdate)
-      
+
       return () => {
         window.removeEventListener('avatarUpdated', handleAvatarUpdate)
       }
@@ -82,7 +82,7 @@ export const HomeHeader = () => {
       const response = await api.get<{ success: boolean; data: { email?: string; name?: string; role?: string } }>(
         API_ENDPOINTS.AUTH.PROFILE
       )
-      
+
       if (response.data.success && response.data.data) {
         const data = response.data.data
         setUserInfo({
@@ -137,7 +137,7 @@ export const HomeHeader = () => {
       const response = await api.get<{ success: boolean; data: { avatar_url?: string; avatarUrl?: string } }>(
         API_ENDPOINTS.AUTH.PROFILE
       )
-      
+
       if (response.data.success && response.data.data) {
         // Check both avatar_url (snake_case from backend) and avatarUrl (camelCase)
         const avatarUrl = response.data.data.avatar_url || response.data.data.avatarUrl
@@ -186,9 +186,9 @@ export const HomeHeader = () => {
               className="flex items-center gap-3 hover:opacity-80 transition-opacity cursor-pointer"
               aria-label="Go to Homepage"
             >
-              <img 
-                src="/images2/image copy.png" 
-                alt="IBN Tea Logo" 
+              <img
+                src="/images2/image copy.png"
+                alt="IBN Tea Logo"
                 className="h-12 w-auto object-contain"
               />
               <span className="text-2xl font-bold" style={{ color: '#22C55E' }}>
@@ -201,8 +201,20 @@ export const HomeHeader = () => {
               <a href="#products" className="text-gray-700 hover:text-green-600 transition-colors font-medium">
                 Sản phẩm
               </a>
-              <a href="#process" className="text-gray-700 hover:text-green-600 transition-colors font-medium">
-                Quy trình
+              <a
+                href="#journey"
+                onClick={(e) => {
+                  e.preventDefault()
+                  const element = document.getElementById('journey')
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth' })
+                  } else {
+                    window.location.href = '/#journey'
+                  }
+                }}
+                className="text-gray-700 hover:text-green-600 transition-colors font-medium"
+              >
+                Câu Chuyện Cây Chè
               </a>
               <a href="#uses" className="text-gray-700 hover:text-green-600 transition-colors font-medium">
                 Công dụng
@@ -212,8 +224,20 @@ export const HomeHeader = () => {
               </a>
             </nav>
 
-            {/* Right: User menu */}
-            <div className="relative" ref={menuRef}>
+            {/* Mobile Menu Button */}
+            <button
+              onClick={() => setShowUserMenu(!showUserMenu)}
+              className="md:hidden p-2 rounded-lg hover:bg-gray-100 transition-colors"
+            >
+              {showUserMenu ? (
+                <X className="h-6 w-6 text-gray-600" />
+              ) : (
+                <Menu className="h-6 w-6 text-gray-600" />
+              )}
+            </button>
+
+            {/* Right: User menu (Desktop) */}
+            <div className="hidden md:block relative" ref={menuRef}>
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
                 className="flex items-center gap-3 px-3 py-2 rounded-xl border border-gray-200 bg-white hover:bg-gray-50 transition focus:outline-none focus:ring-2 focus:ring-green-500/30"
@@ -245,7 +269,7 @@ export const HomeHeader = () => {
                 )}
               </button>
 
-              {/* Dropdown menu */}
+              {/* Dropdown menu (Desktop) */}
               {showUserMenu && (
                 <div className="absolute right-0 mt-2 w-56 rounded-2xl shadow-2xl bg-white border border-gray-200 z-20">
                   {/* User info section */}
@@ -299,6 +323,94 @@ export const HomeHeader = () => {
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu (Dropdown) */}
+        {showUserMenu && (
+          <div className="md:hidden border-t border-gray-100 bg-white px-4 py-4 shadow-lg">
+            <nav className="flex flex-col gap-4">
+              <a href="#products" className="text-gray-700 hover:text-green-600 font-medium py-2">
+                Sản phẩm
+              </a>
+              <a
+                href="#journey"
+                onClick={(e) => {
+                  e.preventDefault()
+                  setShowUserMenu(false)
+                  const element = document.getElementById('journey')
+                  if (element) {
+                    element.scrollIntoView({ behavior: 'smooth' })
+                  } else {
+                    window.location.href = '/#journey'
+                  }
+                }}
+                className="text-gray-700 hover:text-green-600 font-medium py-2"
+              >
+                Câu Chuyện Cây Chè
+              </a>
+              <a href="#uses" className="text-gray-700 hover:text-green-600 font-medium py-2">
+                Công dụng
+              </a>
+              <a href="#about" className="text-gray-700 hover:text-green-600 font-medium py-2">
+                Giới thiệu
+              </a>
+
+              <div className="border-t border-gray-100 my-2"></div>
+
+              {/* Mobile User Actions */}
+              <div className="flex items-center gap-3 py-2">
+                <div className="h-10 w-10 rounded-full bg-gradient-to-r from-green-600 to-emerald-700 flex items-center justify-center overflow-hidden border-2 border-white shadow-md">
+                  {userAvatar ? (
+                    <img
+                      src={userAvatar}
+                      alt="User avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="h-6 w-6 text-white" />
+                  )}
+                </div>
+                <div>
+                  <div className="font-medium text-gray-900">
+                    {userInfo?.name || userInfo?.email?.split('@')[0]}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {userInfo?.email}
+                  </div>
+                </div>
+              </div>
+
+              <button
+                onClick={() => {
+                  setShowUserMenu(false)
+                  navigate('/dashboard')
+                }}
+                className="flex items-center gap-2 text-gray-700 hover:text-green-600 py-2"
+              >
+                <LayoutDashboard className="h-5 w-5" />
+                Dashboard
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowUserMenu(false)
+                  setShowProfilePopup(true)
+                }}
+                className="flex items-center gap-2 text-gray-700 hover:text-green-600 py-2"
+              >
+                <User className="h-5 w-5" />
+                Profile
+              </button>
+
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 text-red-600 hover:text-red-700 py-2"
+              >
+                <LogOut className="h-5 w-5" />
+                Đăng xuất
+              </button>
+            </nav>
+          </div>
+        )}
       </header>
 
       {/* Profile Popup */}

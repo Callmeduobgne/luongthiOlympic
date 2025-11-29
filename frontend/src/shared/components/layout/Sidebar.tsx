@@ -46,6 +46,11 @@ const navItems: NavItem[] = [
     icon: LayoutDashboard,
   },
   {
+    label: 'Supply Chain',
+    path: '/supply-chain',
+    icon: Blocks,
+  },
+  {
     label: 'Deploy Chaincode',
     path: '/deploy-chaincode',
     icon: Code,
@@ -58,7 +63,7 @@ const navItems: NavItem[] = [
   {
     label: 'Blockchain Explorer',
     path: '/explorer',
-    icon: Blocks,
+    icon: Network,
   },
   {
     label: 'Analytics',

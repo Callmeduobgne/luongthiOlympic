@@ -81,5 +81,16 @@ export const batchApi = {
     )
     return response.data.data
   },
+
+  /**
+   * Get all batches
+   * Uses REST API endpoint (auth required)
+   */
+  getAllBatches: async (): Promise<TeaBatch[]> => {
+    const response = await api.get<ApiResponse<{ batches: TeaBatch[] }>>(
+      API_ENDPOINTS.BATCHES.LIST
+    )
+    return response.data.data?.batches || []
+  },
 }
 

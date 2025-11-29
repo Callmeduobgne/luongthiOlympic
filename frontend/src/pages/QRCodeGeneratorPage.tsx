@@ -41,7 +41,8 @@ export const QRCodeGeneratorPage = () => {
         queryKey: ['transactions'],
         queryFn: async () => {
             const response = await api.get('/api/v1/blockchain/transactions?limit=50')
-            return response.data.data || []
+            const responseData = response.data?.data
+            return Array.isArray(responseData) ? responseData : (responseData?.transactions || [])
         },
         refetchInterval: 10000, // Refresh every 10 seconds
     })
