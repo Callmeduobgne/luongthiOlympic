@@ -1099,6 +1099,9 @@ join_fabric_peers() {
     print_header "Join Peers to Channel: ${channel_name}"
     echo ""
     
+    # Initialize has_block_file variable
+    local has_block_file=false
+    
     local channel_block="core/channel-artifacts/${channel_name}.block"
     
     # Check if channel block exists
@@ -1287,15 +1290,14 @@ join_fabric_peers() {
                             docker exec "${first_peer}" mv "${fetched_block}" "/root/${channel_name}.block" 2>/dev/null
                             if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
                                 print_success "Fetched and saved genesis block from channel"
+                                has_block_file=true
                             else
                                 print_warning "Fetched block but could not copy to host"
-                                print_info "Channel exists, peers can join without block file"
-                                return 0  # Continue anyway - peers can fetch block themselves
+                                print_info "Will proceed with joining peers (they can use block from container)"
                             fi
                         else
                             print_warning "Block fetched but could not locate in container"
-                            print_info "Channel exists, peers can join without block file"
-                            return 0  # Continue anyway
+                            print_info "Will proceed with joining peers (they will fetch block automatically)"
                         fi
                     else
                         print_warning "Could not fetch block, but channel exists"
@@ -1303,12 +1305,12 @@ join_fabric_peers() {
                         echo ""
                         echo -ne "${YELLOW}Continue with joining peers? (y/N): ${NC}"
                         read -r response
-                        if [[ "$response" =~ ^[Yy]$ ]]; then
-                            return 0  # Continue - peers can join without block file
-                        else
+                        if [[ ! "$response" =~ ^[Yy]$ ]]; then
+                            print_info "Aborted by user"
                             return 1
                         fi
                     fi
+                    # Continue to join peers - don't return here
                 else
                     print_error "Channel '${channel_name}' does not exist"
                     print_info "Please create the channel first using option 3"
@@ -1323,17 +1325,25 @@ join_fabric_peers() {
         fi
     else
         print_success "Channel block file found: ${channel_block}"
+        has_block_file=true
     fi
     
     # Check if we have block file or can proceed without it
-    local has_block_file=false
-    if [ -f "${channel_block}" ] && [ -s "${channel_block}" ]; then
-        has_block_file=true
-        print_success "Channel block file found: ${channel_block}"
-    else
+    if [ -z "${has_block_file:-}" ]; then
+        has_block_file=false
+        if [ -f "${channel_block}" ] && [ -s "${channel_block}" ]; then
+            has_block_file=true
+        fi
+    fi
+    
+    if [ "$has_block_file" = false ]; then
         print_warning "Channel block file not available"
         print_info "Will attempt to join peers without block file (peers will fetch from orderer)"
     fi
+    
+    echo ""
+    print_info "Starting peer join process..."
+    echo ""
     
     # Get list of all peers - there are 3 peers in the network
     local peers=("peer0.org1.ibn.vn:7051" "peer1.org1.ibn.vn:8051" "peer2.org1.ibn.vn:9051")

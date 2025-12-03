@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 /**
  * Copyright 2025 IBN Network (ICTU Blockchain Network)
  *
@@ -14,6 +15,8 @@
  * limitations under the License.
  */
 
+=======
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',

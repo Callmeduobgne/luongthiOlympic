@@ -60,8 +60,12 @@ services:
     - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
     - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
     - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+<<<<<<< HEAD
     - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
     - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+=======
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - ORDERER_CHANNELPARTICIPATION_ENABLED=true
     - ORDERER_ADMIN_TLS_ENABLED=true
     - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
@@ -77,7 +81,10 @@ services:
     - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/msp:/var/hyperledger/orderer/msp
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls:/var/hyperledger/orderer/tls
+<<<<<<< HEAD
     - ./core/configtx:/etc/hyperledger/configtx
+=======
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - orderer.ibn.vn:/var/hyperledger/production/orderer
     ports:
     - 7050:7050
@@ -109,8 +116,12 @@ services:
     - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
     - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
     - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+<<<<<<< HEAD
     - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
     - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+=======
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - ORDERER_CHANNELPARTICIPATION_ENABLED=true
     - ORDERER_ADMIN_TLS_ENABLED=true
     - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
@@ -126,7 +137,10 @@ services:
     - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/msp:/var/hyperledger/orderer/msp
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/tls:/var/hyperledger/orderer/tls
+<<<<<<< HEAD
     - ./core/configtx:/etc/hyperledger/configtx
+=======
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - orderer1.ibn.vn:/var/hyperledger/production/orderer
     ports:
     - 8050:8050
@@ -158,8 +172,12 @@ services:
     - ORDERER_GENERAL_CLUSTER_CLIENTCERTIFICATE=/var/hyperledger/orderer/tls/server.crt
     - ORDERER_GENERAL_CLUSTER_CLIENTPRIVATEKEY=/var/hyperledger/orderer/tls/server.key
     - ORDERER_GENERAL_CLUSTER_ROOTCAS=[/var/hyperledger/orderer/tls/ca.crt]
+<<<<<<< HEAD
     - ORDERER_GENERAL_BOOTSTRAPMETHOD=file
     - ORDERER_GENERAL_GENESISFILE=/var/hyperledger/orderer/orderer.genesis.block
+=======
+    - ORDERER_GENERAL_BOOTSTRAPMETHOD=none
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - ORDERER_CHANNELPARTICIPATION_ENABLED=true
     - ORDERER_ADMIN_TLS_ENABLED=true
     - ORDERER_ADMIN_TLS_CERTIFICATE=/var/hyperledger/orderer/tls/server.crt
@@ -175,7 +193,10 @@ services:
     - ./core/system-genesis-block/genesis.block:/var/hyperledger/orderer/orderer.genesis.block
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/msp:/var/hyperledger/orderer/msp
     - ./core/organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/tls:/var/hyperledger/orderer/tls
+<<<<<<< HEAD
     - ./core/configtx:/etc/hyperledger/configtx
+=======
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     - orderer2.ibn.vn:/var/hyperledger/production/orderer
     ports:
     - 9050:9050
@@ -455,8 +476,12 @@ services:
       # Allow init script to use password from env var
     volumes:
     - postgres_data:/var/lib/postgresql/data
+<<<<<<< HEAD
     - ./backend/migrations:/migrations:ro
     - ./backend/scripts/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+=======
+    - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
     ports:
     - 5432:5432
     networks:

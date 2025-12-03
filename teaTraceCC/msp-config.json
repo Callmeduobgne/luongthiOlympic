@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 {
   "mspRoles": {
     "farmer": {
@@ -15,3 +16,22 @@
   }
 }
 
+=======
+{
+  "mspRoles": {
+    "farmer": {
+      "mspId": "Org1MSP",
+      "description": "Farmer - create tea batches"
+    },
+    "verifier": {
+      "mspId": "Org1MSP",
+      "description": "Verifier - verify tea batches"
+    },
+    "admin": {
+      "mspId": "Org1MSP",
+      "description": "Admin - manage batch status"
+    }
+  }
+}
+
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc

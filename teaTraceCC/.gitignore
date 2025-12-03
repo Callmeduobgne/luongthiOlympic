@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Logs
 logs
 *.log
@@ -35,3 +36,42 @@ Thumbs.db
 tmp/
 temp/
 
+=======
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# TypeScript cache
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Chaincode package
+*.tar.gz
+!teaTraceCC.tar.gz
+
+# Temporary files
+*.tmp
+tmp/
+temp/
+
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc

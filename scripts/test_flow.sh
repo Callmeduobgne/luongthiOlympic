@@ -1,5 +1,6 @@
 #!/bin/bash
 
+<<<<<<< HEAD
 # Copyright 2025 IBN Network (ICTU Blockchain Network)
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+=======
+>>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc
 # Configuration
 API_URL="http://localhost:9900"
 EMAIL="admin@ibn.vn"
