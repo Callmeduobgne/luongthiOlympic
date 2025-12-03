@@ -1,0 +1,170 @@
+/*
+ * Copyright (c) 2025 IBN Network
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ */
+
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package fabric
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	"github.com/ibn-network/api-gateway/internal/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.uber.org/zap"
+)
+
+// ContractService provides high-level contract operations
+type ContractService struct {
+	gateway *GatewayService
+}
+
+// NewContractService creates a new contract service
+func NewContractService(gateway *GatewayService) *ContractService {
+	return &ContractService{
+		gateway: gateway,
+	}
+}
+
+// CreateBatch creates a new tea batch on the blockchain
+func (s *ContractService) CreateBatch(ctx context.Context, req *models.CreateBatchRequest) (*models.TeaBatch, error) {
+	ctx, span := s.gateway.tracer.Start(ctx, "ContractService.CreateBatch")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("batch.id", req.BatchID),
+		attribute.String("farm.location", req.FarmLocation),
+	)
+
+	result, err := s.gateway.SubmitTransaction(
+		ctx,
+		"createBatch",
+		req.BatchID,
+		req.FarmLocation,
+		req.HarvestDate,
+		req.ProcessingInfo,
+		req.QualityCert,
+	)
+
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to create batch: %w", err)
+	}
+
+	var batch models.TeaBatch
+	if err := json.Unmarshal(result, &batch); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal batch: %w", err)
+	}
+
+	s.gateway.logger.Info("Batch created successfully",
+		zap.String("batch.id", batch.BatchID),
+	)
+
+	return &batch, nil
+}
+
+// GetBatchInfo retrieves batch information from the blockchain
+func (s *ContractService) GetBatchInfo(ctx context.Context, batchID string) (*models.TeaBatch, error) {
+	ctx, span := s.gateway.tracer.Start(ctx, "ContractService.GetBatchInfo")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("batch.id", batchID))
+
+	result, err := s.gateway.EvaluateTransaction(ctx, "getBatchInfo", batchID)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to get batch info: %w", err)
+	}
+
+	// Check if result is null or empty (chaincode returns null for non-existent keys)
+	if len(result) == 0 || string(result) == "null" || string(result) == "{}" {
+		return nil, fmt.Errorf("batch with id '%s' does not exist", batchID)
+	}
+
+	var batch models.TeaBatch
+	if err := json.Unmarshal(result, &batch); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal batch: %w", err)
+	}
+
+	return &batch, nil
+}
+
+// VerifyBatch verifies a batch hash
+func (s *ContractService) VerifyBatch(ctx context.Context, batchID, hashInput string) (*models.VerifyBatchResponse, error) {
+	ctx, span := s.gateway.tracer.Start(ctx, "ContractService.VerifyBatch")
+	defer span.End()
+
+	span.SetAttributes(attribute.String("batch.id", batchID))
+
+	result, err := s.gateway.SubmitTransaction(ctx, "verifyBatch", batchID, hashInput)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to verify batch: %w", err)
+	}
+
+	var response models.VerifyBatchResponse
+	if err := json.Unmarshal(result, &response); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal verify response: %w", err)
+	}
+
+	s.gateway.logger.Info("Batch verification completed",
+		zap.String("batch.id", batchID),
+		zap.Bool("is_valid", response.IsValid),
+	)
+
+	return &response, nil
+}
+
+// UpdateBatchStatus updates the status of a batch
+func (s *ContractService) UpdateBatchStatus(ctx context.Context, batchID, status string) (*models.TeaBatch, error) {
+	ctx, span := s.gateway.tracer.Start(ctx, "ContractService.UpdateBatchStatus")
+	defer span.End()
+
+	span.SetAttributes(
+		attribute.String("batch.id", batchID),
+		attribute.String("status", status),
+	)
+
+	result, err := s.gateway.SubmitTransaction(ctx, "updateBatchStatus", batchID, status)
+	if err != nil {
+		span.RecordError(err)
+		return nil, fmt.Errorf("failed to update batch status: %w", err)
+	}
+
+	var batch models.TeaBatch
+	if err := json.Unmarshal(result, &batch); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal batch: %w", err)
+	}
+
+	s.gateway.logger.Info("Batch status updated",
+		zap.String("batch.id", batchID),
+		zap.String("new_status", status),
+	)
+
+	return &batch, nil
+}
+

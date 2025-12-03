@@ -1,0 +1,128 @@
+/*
+ * Copyright (c) 2025 IBN Network
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ */
+
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package middleware
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"net"
+	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+)
+
+// LoggerMiddleware provides request logging middleware
+type LoggerMiddleware struct {
+	logger *zap.Logger
+}
+
+// NewLoggerMiddleware creates a new logger middleware
+func NewLoggerMiddleware(logger *zap.Logger) *LoggerMiddleware {
+	return &LoggerMiddleware{
+		logger: logger,
+	}
+}
+
+// Log logs HTTP requests with correlation ID
+func (m *LoggerMiddleware) Log(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+
+		// Generate correlation ID
+		correlationID := r.Header.Get("X-Correlation-ID")
+		if correlationID == "" {
+			correlationID = uuid.New().String()
+		}
+
+		// Add correlation ID to response headers
+		w.Header().Set("X-Correlation-ID", correlationID)
+
+		// Create wrapped response writer to capture status code
+		wrapped := &responseWriter{
+			ResponseWriter: w,
+			statusCode:     http.StatusOK,
+		}
+
+		// Add correlation ID to context
+		ctx := r.Context()
+		ctx = withCorrelationID(ctx, correlationID)
+
+		// Process request
+		next.ServeHTTP(wrapped, r.WithContext(ctx))
+
+		// Log request
+		duration := time.Since(start)
+		m.logger.Info("HTTP request",
+			zap.String("correlation_id", correlationID),
+			zap.String("method", r.Method),
+			zap.String("path", r.URL.Path),
+			zap.String("remote_addr", r.RemoteAddr),
+			zap.Int("status", wrapped.statusCode),
+			zap.Duration("duration", duration),
+			zap.String("user_agent", r.UserAgent()),
+		)
+	})
+}
+
+// responseWriter wraps http.ResponseWriter to capture status code
+type responseWriter struct {
+	http.ResponseWriter
+	statusCode int
+}
+
+// WriteHeader captures the status code
+func (rw *responseWriter) WriteHeader(code int) {
+	rw.statusCode = code
+	rw.ResponseWriter.WriteHeader(code)
+}
+
+// Hijack implements http.Hijacker for WebSocket support
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	if hijacker, ok := rw.ResponseWriter.(http.Hijacker); ok {
+		return hijacker.Hijack()
+	}
+	return nil, nil, fmt.Errorf("ResponseWriter does not implement http.Hijacker")
+}
+
+// withCorrelationID adds correlation ID to context
+func withCorrelationID(ctx context.Context, correlationID string) context.Context {
+	return context.WithValue(ctx, "correlationID", correlationID)
+}
+
+// GetCorrelationID retrieves correlation ID from context
+func GetCorrelationID(ctx context.Context) string {
+	if id, ok := ctx.Value("correlationID").(string); ok {
+		return id
+	}
+	return ""
+}
+

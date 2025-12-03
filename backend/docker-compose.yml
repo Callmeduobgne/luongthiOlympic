@@ -1,0 +1,66 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ibn-backend
+    restart: unless-stopped
+    ports:
+      - "9090:8080"
+    environment:
+      SERVER_HOST: 0.0.0.0
+      SERVER_PORT: 8080
+      ENV: production
+      DB_HOST: ibn-postgres
+      DB_PORT: 5432
+      DB_USER: gateway
+      DB_PASSWORD: changeme
+      DB_NAME: ibn_gateway
+      DB_SSLMODE: disable
+      DB_MIN_CONNS: 5
+      DB_MAX_CONNS: 25
+      DB_IDLE_TIMEOUT: 5m
+      DB_MAX_LIFETIME: 1h
+      REDIS_HOST: ibn-redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: changeme
+      REDIS_DB: 0
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_CRYPTO_PATH: /fabric/organizations
+      FABRIC_CERT_PATH: /fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      FABRIC_KEY_PATH: ""
+      FABRIC_TLS_CERT_PATH: ""
+      FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
+      FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
+      FABRIC_CHANNEL_NAME: ibnchannel
+      JWT_SECRET: ibn-network-secret-production-2024
+      JWT_ISSUER: ibn-network
+      JWT_ACCESS_TTL: 15m
+      JWT_REFRESH_TTL: 168h
+      RATE_LIMIT_ENABLED: "true"
+      RATE_LIMIT_REQUESTS: 1000
+      RATE_LIMIT_BURST: 50
+      CB_MAX_REQUESTS: 3
+      CB_INTERVAL: 10s
+      CB_TIMEOUT: 60s
+      CB_FAILURE_RATIO: 0.6
+      LOG_LEVEL: info
+      LOG_FORMAT: json
+      OTEL_ENABLED: "false"
+    volumes:
+      - ../core/organizations:/fabric/organizations:ro
+    networks:
+      - ibn-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  ibn-network:
+    name: ibn-network
+    external: true

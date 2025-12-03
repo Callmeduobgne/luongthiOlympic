@@ -1,0 +1,175 @@
+# PostgreSQL Exporter Extended Queries
+# Custom queries for IBN Network monitoring
+# Các collector mặc định (postmaster, replication, statio_user_tables, process_idle, stat_database)
+# đã tương thích với PostgreSQL 16 kể từ postgres-exporter v0.15.0. File này bổ sung thêm
+# các truy vấn tùy chỉnh để có thêm metrics phục vụ giám sát chi tiết.
+
+# Database size metrics (safe và không trùng tên với mặc định)
+ibn_pg_database_size:
+  query: |
+    SELECT 
+      datname,
+      pg_database_size(datname) AS size_bytes
+    FROM pg_database
+    WHERE datistemplate = false
+  master: true
+  metrics:
+    - datname:
+        usage: "LABEL"
+        description: "Name of the database"
+    - size_bytes:
+        usage: "GAUGE"
+        description: "Total size of the database in bytes"
+
+# Connection metrics (safe)
+ibn_pg_stat_activity_count:
+  query: |
+    SELECT 
+      count(*) as count,
+      state
+    FROM pg_stat_activity
+    WHERE datname IS NOT NULL
+    GROUP BY state
+  master: true
+  metrics:
+    - count:
+        usage: "GAUGE"
+        description: "Number of connections by state"
+    - state:
+        usage: "LABEL"
+        description: "Connection state"
+
+# Table statistics (safe - excludes problematic toast_blks_read)
+ibn_pg_stat_user_tables:
+  query: |
+    SELECT 
+      schemaname,
+      relname,
+      seq_scan,
+      seq_tup_read,
+      idx_scan,
+      idx_tup_fetch,
+      n_tup_ins,
+      n_tup_upd,
+      n_tup_del,
+      n_live_tup,
+      n_dead_tup,
+      last_vacuum,
+      last_autovacuum,
+      last_analyze,
+      last_autoanalyze
+    FROM pg_stat_user_tables
+  master: true
+  metrics:
+    - schemaname:
+        usage: "LABEL"
+        description: "Schema name"
+    - relname:
+        usage: "LABEL"
+        description: "Table name"
+    - seq_scan:
+        usage: "COUNTER"
+        description: "Number of sequential scans"
+    - seq_tup_read:
+        usage: "COUNTER"
+        description: "Number of tuples read sequentially"
+    - idx_scan:
+        usage: "COUNTER"
+        description: "Number of index scans"
+    - idx_tup_fetch:
+        usage: "COUNTER"
+        description: "Number of tuples fetched by index"
+    - n_tup_ins:
+        usage: "COUNTER"
+        description: "Number of tuples inserted"
+    - n_tup_upd:
+        usage: "COUNTER"
+        description: "Number of tuples updated"
+    - n_tup_del:
+        usage: "COUNTER"
+        description: "Number of tuples deleted"
+    - n_live_tup:
+        usage: "GAUGE"
+        description: "Estimated number of live tuples"
+    - n_dead_tup:
+        usage: "GAUGE"
+        description: "Estimated number of dead tuples"
+
+# Database statistics (safe - handles NULL properly)
+ibn_pg_stat_database:
+  query: |
+    SELECT 
+      COALESCE(datname, 'unknown') as datname,
+      numbackends,
+      xact_commit,
+      xact_rollback,
+      blks_read,
+      blks_hit,
+      tup_returned,
+      tup_fetched,
+      tup_inserted,
+      tup_updated,
+      tup_deleted,
+      conflicts,
+      temp_files,
+      temp_bytes,
+      deadlocks,
+      blk_read_time,
+      blk_write_time,
+      stats_reset
+    FROM pg_stat_database
+    WHERE datname IS NOT NULL
+  master: true
+  metrics:
+    - datname:
+        usage: "LABEL"
+        description: "Database name"
+    - numbackends:
+        usage: "GAUGE"
+        description: "Number of backends currently connected to this database"
+    - xact_commit:
+        usage: "COUNTER"
+        description: "Number of transactions committed"
+    - xact_rollback:
+        usage: "COUNTER"
+        description: "Number of transactions rolled back"
+    - blks_read:
+        usage: "COUNTER"
+        description: "Number of disk blocks read"
+    - blks_hit:
+        usage: "COUNTER"
+        description: "Number of buffer hits"
+    - tup_returned:
+        usage: "COUNTER"
+        description: "Number of rows returned"
+    - tup_fetched:
+        usage: "COUNTER"
+        description: "Number of rows fetched"
+    - tup_inserted:
+        usage: "COUNTER"
+        description: "Number of rows inserted"
+    - tup_updated:
+        usage: "COUNTER"
+        description: "Number of rows updated"
+    - tup_deleted:
+        usage: "COUNTER"
+        description: "Number of rows deleted"
+    - conflicts:
+        usage: "COUNTER"
+        description: "Number of queries canceled due to conflicts"
+    - temp_files:
+        usage: "COUNTER"
+        description: "Number of temporary files created"
+    - temp_bytes:
+        usage: "COUNTER"
+        description: "Total amount of data written to temporary files"
+    - deadlocks:
+        usage: "COUNTER"
+        description: "Number of deadlocks detected"
+    - blk_read_time:
+        usage: "COUNTER"
+        description: "Time spent reading data file blocks"
+    - blk_write_time:
+        usage: "COUNTER"
+        description: "Time spent writing data file blocks"
+

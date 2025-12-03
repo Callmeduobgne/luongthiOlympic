@@ -1,0 +1,216 @@
+version: '3.8'
+
+networks:
+  fabric-network:
+    external: true
+  gateway-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: api-gateway-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ibn_gateway}
+      POSTGRES_USER: ${POSTGRES_USER:-gateway}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ../migrations:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-gateway} -d ${POSTGRES_DB:-ibn_gateway}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: api-gateway-redis
+    restart: unless-stopped
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - gateway-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # API Gateway Instance 1
+  gateway1:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: api-gateway-1
+    restart: unless-stopped
+    environment:
+      - GATEWAY_PORT=8080
+      - GATEWAY_ENV=${GATEWAY_ENV:-production}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ibn_gateway}
+      - POSTGRES_USER=${POSTGRES_USER:-gateway}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - FABRIC_CHANNEL=ibnchannel
+      - FABRIC_CHAINCODE=teaTraceCC
+      - FABRIC_MSP_ID=Org1MSP
+      - FABRIC_PEER_ENDPOINT=peer0.org1.ibn.vn:7051
+      - FABRIC_PEER_HOST_OVERRIDE=peer0.org1.ibn.vn
+      - FABRIC_USER_CERT_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      - FABRIC_USER_KEY_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      - FABRIC_PEER_TLS_CA_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/peers/peer0.org1.ibn.vn/tls/ca.crt
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      - JWT_EXPIRY=24h
+    ports:
+      - "8081:8080"
+    volumes:
+      - ../../core/organizations:/app/organizations:ro
+    networks:
+      - gateway-network
+      - fabric-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway Instance 2
+  gateway2:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: api-gateway-2
+    restart: unless-stopped
+    environment:
+      - GATEWAY_PORT=8080
+      - GATEWAY_ENV=${GATEWAY_ENV:-production}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ibn_gateway}
+      - POSTGRES_USER=${POSTGRES_USER:-gateway}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - FABRIC_CHANNEL=ibnchannel
+      - FABRIC_CHAINCODE=teaTraceCC
+      - FABRIC_MSP_ID=Org1MSP
+      - FABRIC_PEER_ENDPOINT=peer1.org1.ibn.vn:8051
+      - FABRIC_PEER_HOST_OVERRIDE=peer1.org1.ibn.vn
+      - FABRIC_USER_CERT_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      - FABRIC_USER_KEY_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      - FABRIC_PEER_TLS_CA_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/peers/peer1.org1.ibn.vn/tls/ca.crt
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      - JWT_EXPIRY=24h
+    ports:
+      - "8082:8080"
+    volumes:
+      - ../../core/organizations:/app/organizations:ro
+    networks:
+      - gateway-network
+      - fabric-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # API Gateway Instance 3
+  gateway3:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: api-gateway-3
+    restart: unless-stopped
+    environment:
+      - GATEWAY_PORT=8080
+      - GATEWAY_ENV=${GATEWAY_ENV:-production}
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-ibn_gateway}
+      - POSTGRES_USER=${POSTGRES_USER:-gateway}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-changeme}
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-changeme}
+      - FABRIC_CHANNEL=ibnchannel
+      - FABRIC_CHAINCODE=teaTraceCC
+      - FABRIC_MSP_ID=Org1MSP
+      - FABRIC_PEER_ENDPOINT=peer2.org1.ibn.vn:9051
+      - FABRIC_PEER_HOST_OVERRIDE=peer2.org1.ibn.vn
+      - FABRIC_USER_CERT_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
+      - FABRIC_USER_KEY_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore
+      - FABRIC_PEER_TLS_CA_PATH=/app/organizations/peerOrganizations/org1.ibn.vn/peers/peer2.org1.ibn.vn/tls/ca.crt
+      - JWT_SECRET=${JWT_SECRET:-your-super-secret-jwt-key-change-this-in-production-min-32-chars}
+      - JWT_EXPIRY=24h
+    ports:
+      - "8083:8080"
+    volumes:
+      - ../../core/organizations:/app/organizations:ro
+    networks:
+      - gateway-network
+      - fabric-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Nginx Load Balancer
+  nginx:
+    image: nginx:alpine
+    container_name: api-gateway-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "8080:80"
+    networks:
+      - gateway-network
+    depends_on:
+      - gateway1
+      - gateway2
+      - gateway3
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+

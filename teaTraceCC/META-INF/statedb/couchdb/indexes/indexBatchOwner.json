@@ -1,0 +1,20 @@
+{
+  "index": {
+    "fields": [
+      {
+        "docType": "asc"
+      },
+      {
+        "owner": "asc"
+      },
+      {
+        "timestamp": "desc"
+      }
+    ]
+  },
+  "ddoc": "indexBatchOwner",
+  "name": "indexBatchOwner",
+  "type": "json"
+}
+
+
