@@ -177,12 +177,12 @@ Profiles:
                     - *Org1
 
     ################################################################################
-    # Channel Profile
+    # Application Channel Profile (Fabric 2.5.9)
     # 
-    # This profile defines a channel for application transactions
+    # In Fabric 2.x+, application channels don't use Consortium.
+    # This profile creates a genesis block for the application channel.
     ################################################################################
     ThreePeersChannel:
-        Consortium: SampleConsortium
         <<: *ChannelDefaults
         Application:
             <<: *ApplicationDefaults

@@ -899,6 +899,9 @@ create_fabric_channel() {
             print_info "Running configtxgen in Docker container..."
             print_info "Profile: ${profile_name}, Channel: ${channel_name}"
             
+            # In Fabric 2.x, we create a genesis block for the channel instead of a transaction file
+            local channel_block="${abs_channel_artifacts}/${channel_name}.block"
+            
             local docker_output=$(docker run --rm \
                 -v "${abs_core_dir}:/core" \
                 -w /core \
@@ -906,15 +909,19 @@ create_fabric_channel() {
                 hyperledger/fabric-tools:2.5 \
                 configtxgen \
                 -profile "${profile_name}" \
-                -outputCreateChannelTx "channel-artifacts/${channel_name}.tx" \
+                -outputBlock "channel-artifacts/${channel_name}.block" \
                 -channelID "${channel_name}" 2>&1)
             
             local docker_status=$?
             
-            if [ $docker_status -eq 0 ] && [ -f "${channel_tx}" ]; then
-                print_success "Generated channel transaction file using Docker"
+            if [ $docker_status -eq 0 ] && [ -f "${channel_block}" ]; then
+                print_success "Generated channel genesis block using Docker"
+                # Mark that we have genesis block for later use
+                export CHANNEL_GENESIS_BLOCK="${channel_block}"
+                # For compatibility, create a dummy .tx file pointing to the block
+                echo "# Channel genesis block created at ${channel_block}" > "${channel_tx}"
             else
-                print_error "Failed to generate channel transaction file"
+                print_error "Failed to generate channel genesis block"
                 echo ""
                 print_info "Docker output:"
                 echo "$docker_output" | tail -20
@@ -981,84 +988,29 @@ create_fabric_channel() {
         return 1
     fi
     
-    # Create channel using peer0
-    print_info "Creating channel ${channel_name}..."
+    # In Fabric 2.5.9, we don't use peer channel create with .tx file
+    # Instead, we use the genesis block created by configtxgen
+    print_info "Preparing channel ${channel_name} for peer joining..."
     echo ""
     
-    local create_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-        -e CORE_PEER_TLS_ENABLED=true \
-        -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-        -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
-        -w /root \
-        "${first_peer}" \
-        peer channel create \
-        -o "orderer.ibn.vn:7050" \
-        -c "${channel_name}" \
-        -f "${channel_name}.tx" \
-        --tls \
-        --cafile "/etc/hyperledger/fabric/tls/ca.crt" \
-        --outputBlock "${channel_name}.block" \
-        --timeout 30s 2>&1)
+    # Check if we have genesis block
+    local genesis_block="${project_root}/core/channel-artifacts/${channel_name}.block"
+    if [ ! -f "${genesis_block}" ]; then
+        print_error "Genesis block not found: ${genesis_block}"
+        print_info "This should have been created by configtxgen"
+        return 1
+    fi
     
-    local create_status=$?
-    
-    if [ $create_status -eq 0 ]; then
-        print_success "Channel ${channel_name} created successfully"
+    # Copy genesis block to peer container
+    print_info "Copying genesis block to peer container..."
+    if docker cp "${genesis_block}" "${first_peer}:/root/${channel_name}.block" 2>&1; then
+        print_success "Genesis block copied to peer container"
+        export CHANNEL_BLOCK_AVAILABLE="true"
+        export CHANNEL_JUST_CREATED="true"
         
-        # Wait a moment for channel to be fully committed to orderer
-        print_info "Waiting for channel to be committed to orderer..."
-        sleep 3
-        
-        # Find block file location in container
-        print_info "Locating channel block file in container..."
-        local block_locations=(
-            "/root/${channel_name}.block"
-            "/var/hyperledger/production/${channel_name}.block"
-            "/opt/gopath/src/github.com/hyperledger/fabric/peer/${channel_name}.block"
-        )
-        
-        local found_block_path=""
-        for block_path in "${block_locations[@]}"; do
-            if docker exec "${first_peer}" test -f "${block_path}" 2>/dev/null; then
-                found_block_path="${block_path}"
-                print_info "Found block file at: ${block_path}"
-                break
-            fi
-        done
-        
-        # If not found in common locations, search for it
-        if [ -z "$found_block_path" ]; then
-            print_info "Searching for block file in container..."
-            found_block_path=$(docker exec "${first_peer}" find /root /var/hyperledger -name "${channel_name}.block" 2>/dev/null | head -1)
-            if [ -n "$found_block_path" ]; then
-                print_info "Found block file at: ${found_block_path}"
-            fi
-        fi
-        
-        # Copy block file to host
-        if [ -n "$found_block_path" ]; then
-            print_info "Copying channel block to host..."
-            if docker cp "${first_peer}:${found_block_path}" "${channel_block}" 2>&1; then
-                print_success "Channel block saved to ${channel_block}"
-                
-                # Verify block file
-                if [ -f "${channel_block}" ] && [ -s "${channel_block}" ]; then
-                    local block_size=$(stat -f%z "${channel_block}" 2>/dev/null || stat -c%s "${channel_block}" 2>/dev/null)
-                    print_info "Block file size: ${block_size} bytes"
-                else
-                    print_warning "Block file copied but appears to be empty or invalid"
-                fi
-            else
-                print_warning "Could not copy block file to host, but channel was created"
-                print_info "Block file location in container: ${found_block_path}"
-            fi
-        else
-            print_warning "Could not locate block file in container, but channel was created"
-            print_info "The block file may be in a different location. Channel creation was successful."
-            print_info "You can manually find and copy it:"
-            echo "  docker exec ${first_peer} find / -name '${channel_name}.block' 2>/dev/null"
-        fi
+        # Also copy to host channel-artifacts for consistency
+        local channel_block="core/channel-artifacts/${channel_name}.block"
+        print_success "Channel ${channel_name} is ready for peer joining"
         
         # Cleanup transaction file from container
         docker exec "${first_peer}" rm -f "/root/${channel_name}.tx" > /dev/null 2>&1
@@ -1067,21 +1019,10 @@ create_fabric_channel() {
         print_success "Channel creation completed successfully!"
         return 0
     else
-        print_error "Failed to create channel ${channel_name}"
-        echo ""
-        print_info "Error details:"
-        echo "$create_output" | tail -20
-        echo ""
-        
-        # Check for common errors
-        if echo "$create_output" | grep -qi "already exists"; then
-            print_warning "Channel may already exist. Try joining peers instead."
-        elif echo "$create_output" | grep -qi "timeout"; then
-            print_warning "Request timed out. Check orderer connectivity."
-        elif echo "$create_output" | grep -qi "tls"; then
-            print_warning "TLS error. Check certificates and orderer TLS configuration."
-        fi
-        
+        print_error "Failed to copy genesis block to peer container"
+        print_info "Troubleshooting:"
+        echo "  1. Check if genesis block exists: ls -la ${genesis_block}"
+        echo "  2. Check if peer container is running: docker ps | grep ${first_peer}"
         return 1
     fi
 }
@@ -1106,108 +1047,178 @@ join_fabric_peers() {
     
     # Check if channel block exists
     if [ ! -f "${channel_block}" ]; then
-        print_warning "Channel block file not found: ${channel_block}"
-        print_info "Trying to retrieve from peer0 container..."
-        
-        # Try to get block from peer0
-        local first_peer="peer0.org1.ibn.vn"
-        if check_fabric_container "${first_peer}"; then
-            print_info "Searching for block file in ${first_peer} container..."
+        # Check if channel was just created in this session
+        if [ "${CHANNEL_JUST_CREATED:-false}" = "true" ]; then
+            print_info "Channel was just created in this session"
             
-            # Search for block file in common locations
-            local block_locations=(
-                "/root/${channel_name}.block"
-                "/var/hyperledger/production/${channel_name}.block"
-                "/opt/gopath/src/github.com/hyperledger/fabric/peer/${channel_name}.block"
-            )
-            
-            local found_block_path=""
-            for block_path in "${block_locations[@]}"; do
-                if docker exec "${first_peer}" test -f "${block_path}" 2>/dev/null; then
-                    found_block_path="${block_path}"
-                    print_info "Found block file at: ${block_path}"
-                    break
+            # Check if block is in container
+            if [ -n "${CHANNEL_BLOCK_IN_CONTAINER:-}" ]; then
+                print_info "Block file exists in container at: ${CHANNEL_BLOCK_IN_CONTAINER}"
+                print_info "Copying block file from container..."
+                if docker cp "${first_peer}:${CHANNEL_BLOCK_IN_CONTAINER}" "${channel_block}" 2>/dev/null; then
+                    print_success "Block file copied successfully"
+                    has_block_file=true
+                else
+                    print_warning "Could not copy block file, will try to use it directly from container"
+                    # We'll handle this in the join loop
                 fi
-            done
-            
-            # If not found, search more broadly
-            if [ -z "$found_block_path" ]; then
-                print_info "Searching container for block file..."
-                found_block_path=$(docker exec "${first_peer}" find /root /var/hyperledger -name "${channel_name}.block" 2>/dev/null | head -1)
-                if [ -n "$found_block_path" ]; then
-                    print_info "Found block file at: ${found_block_path}"
+            elif [ "${CHANNEL_BLOCK_AVAILABLE:-false}" = "true" ]; then
+                print_success "Block file is available"
+                has_block_file=true
+            else
+                print_warning "Channel was created but block file is not available yet"
+                print_info "Waiting 5 more seconds for block to be available..."
+                sleep 5
+                
+                # Try to find block file again
+                local found_block=$(docker exec "${first_peer}" find / -name "${channel_name}.block" 2>/dev/null | grep -v "/proc/" | grep -v "/sys/" | head -1)
+                if [ -n "$found_block" ]; then
+                    print_success "Found block file at: ${found_block}"
+                    if docker cp "${first_peer}:${found_block}" "${channel_block}" 2>/dev/null; then
+                        print_success "Block file copied successfully"
+                        has_block_file=true
+                    fi
                 fi
             fi
-            
-            if [ -n "$found_block_path" ]; then
-                if docker cp "${first_peer}:${found_block_path}" "${channel_block}" 2>/dev/null; then
-                    print_success "Retrieved block file from ${first_peer}"
-                else
-                    print_error "Found block file but could not copy it"
-                    print_info "Block location: ${found_block_path}"
-                    return 1
+        else
+            # Channel was not just created, try to retrieve from peer0 container
+            print_warning "Channel block file not found: ${channel_block}"
+            print_info "Trying to retrieve from peer0 container..."
+        
+            # Try to get block from peer0
+            local first_peer="peer0.org1.ibn.vn"
+            if check_fabric_container "${first_peer}"; then
+                print_info "Searching for block file in ${first_peer} container..."
+                
+                # Search for block file in common locations
+                local block_locations=(
+                    "/root/${channel_name}.block"
+                    "/var/hyperledger/production/${channel_name}.block"
+                    "/opt/gopath/src/github.com/hyperledger/fabric/peer/${channel_name}.block"
+                )
+                
+                local found_block_path=""
+                for block_path in "${block_locations[@]}"; do
+                    if docker exec "${first_peer}" test -f "${block_path}" 2>/dev/null; then
+                        found_block_path="${block_path}"
+                        print_info "Found block file at: ${block_path}"
+                        break
+                    fi
+                done
+                
+                # If not found, search more broadly
+                if [ -z "$found_block_path" ]; then
+                    print_info "Searching container for block file..."
+                    found_block_path=$(docker exec "${first_peer}" find /root /var/hyperledger -name "${channel_name}.block" 2>/dev/null | head -1)
+                    if [ -n "$found_block_path" ]; then
+                        print_info "Found block file at: ${found_block_path}"
+                    fi
                 fi
-            else
-                # Block file not found, check if channel exists
-                print_info "Block file not found. Checking if channel exists..."
                 
-                local channel_list_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                    -e CORE_PEER_TLS_ENABLED=true \
-                    -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                    -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                    -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
-                    -w /root \
-                    "${first_peer}" \
-                    peer channel list 2>&1)
-                
-                # Check if channel exists - output "Channels peers has joined" means peer hasn't joined any channel yet
-                # But channel might still exist on orderer, so we need to check orderer directly
-                local channel_exists=false
-                
-                if echo "$channel_list_output" | grep -qi "${channel_name}"; then
-                    # Channel name found in list - peer has already joined
-                    channel_exists=true
-                    print_success "Channel '${channel_name}' exists and peer0 has already joined"
-                elif echo "$channel_list_output" | grep -qi "Channels peers has joined"; then
-                    # Output shows "Channels peers has joined" - peer hasn't joined any channel yet
-                    # But channel might exist on orderer, verify by trying to fetch block
-                    print_info "Peer0 hasn't joined any channel yet"
-                    print_info "Verifying if channel '${channel_name}' exists on orderer..."
+                if [ -n "$found_block_path" ]; then
+                    if docker cp "${first_peer}:${found_block_path}" "${channel_block}" 2>/dev/null; then
+                        print_success "Retrieved block file from ${first_peer}"
+                    else
+                        print_error "Found block file but could not copy it"
+                        print_info "Block location: ${found_block_path}"
+                        return 1
+                    fi
+                else
+                    # Block file not found, check if channel exists
+                    print_info "Block file not found. Checking if channel exists..."
                     
-                    # Try multiple methods to verify channel exists
-                    print_info "Method 1: Attempting to fetch genesis block..."
-                    local test_fetch=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                    local channel_list_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
                         -e CORE_PEER_TLS_ENABLED=true \
                         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
                         -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
                         -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
                         -w /root \
                         "${first_peer}" \
-                        peer channel fetch 0 "/tmp/test_${channel_name}.block" \
-                        -c "${channel_name}" \
-                        -o "orderer.ibn.vn:7050" \
-                        --tls \
-                        --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
+                        peer channel list 2>&1)
                     
-                    # Check if fetch was successful (multiple success indicators)
-                    if echo "$test_fetch" | grep -qiE "retrieved block|Retrieved block|successfully|fetch completed"; then
+                    # Check if channel exists - output "Channels peers has joined" means peer hasn't joined any channel yet
+                    # But channel might still exist on orderer, so we need to check orderer directly
+                    local channel_exists=false
+                    
+                    if echo "$channel_list_output" | grep -qi "${channel_name}"; then
+                        # Channel name found in list - peer has already joined
                         channel_exists=true
-                        print_success "Channel '${channel_name}' exists on orderer (verified by fetch)"
-                        # Check if block file was actually created
-                        if docker exec "${first_peer}" test -f "/tmp/test_${channel_name}.block" 2>/dev/null; then
-                            # Use this block file
-                            docker exec "${first_peer}" mv "/tmp/test_${channel_name}.block" "/root/${channel_name}.block" 2>/dev/null
-                            if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
-                                print_success "Retrieved and saved genesis block"
-                                has_block_file=true
+                        print_success "Channel '${channel_name}' exists and peer0 has already joined"
+                    elif echo "$channel_list_output" | grep -qi "Channels peers has joined"; then
+                        # Output shows "Channels peers has joined" - peer hasn't joined any channel yet
+                        # But channel might exist on orderer, verify by trying to fetch block
+                        print_info "Peer0 hasn't joined any channel yet"
+                        print_info "Verifying if channel '${channel_name}' exists on orderer..."
+                        
+                        # Try multiple methods to verify channel exists
+                        print_info "Method 1: Attempting to fetch genesis block..."
+                        local test_fetch=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                            -e CORE_PEER_TLS_ENABLED=true \
+                            -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                            -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                            -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+                            -w /root \
+                            "${first_peer}" \
+                            peer channel fetch 0 "/tmp/test_${channel_name}.block" \
+                            -c "${channel_name}" \
+                            -o "orderer.ibn.vn:7050" \
+                            --tls \
+                            --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
+                        
+                        # Check if fetch was successful (multiple success indicators)
+                        if echo "$test_fetch" | grep -qiE "retrieved block|Retrieved block|successfully|fetch completed"; then
+                            channel_exists=true
+                            print_success "Channel '${channel_name}' exists on orderer (verified by fetch)"
+                            # Check if block file was actually created
+                            if docker exec "${first_peer}" test -f "/tmp/test_${channel_name}.block" 2>/dev/null; then
+                                # Use this block file
+                                docker exec "${first_peer}" mv "/tmp/test_${channel_name}.block" "/root/${channel_name}.block" 2>/dev/null
+                                if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
+                                    print_success "Retrieved and saved genesis block"
+                                    has_block_file=true
+                                fi
+                            else
+                                # Cleanup
+                                docker exec "${first_peer}" rm -f "/tmp/test_${channel_name}.block" 2>/dev/null
                             fi
                         else
-                            # Cleanup
-                            docker exec "${first_peer}" rm -f "/tmp/test_${channel_name}.block" 2>/dev/null
+                            # Method 2: Try to get channel info
+                            print_info "Method 2: Querying channel info from orderer..."
+                            local channel_info=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                                -e CORE_PEER_TLS_ENABLED=true \
+                                -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                                -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+                                -w /root \
+                                "${first_peer}" \
+                                peer channel getinfo -c "${channel_name}" \
+                                -o "orderer.ibn.vn:7050" \
+                                --tls \
+                                --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
+                            
+                            if echo "$channel_info" | grep -qiE "Blockchain info|height"; then
+                                channel_exists=true
+                                print_success "Channel '${channel_name}' exists on orderer (verified by getinfo)"
+                            else
+                                # Channel does not exist - FAIL immediately
+                                print_error "Channel '${channel_name}' does not exist on orderer"
+                                print_error "Cannot join peers to a non-existent channel"
+                                echo ""
+                                print_info "You must create the channel first:"
+                                echo "  1. Exit this operation (it will exit automatically)"
+                                echo "  2. Run the setup script again and select option 3: Create Channel"
+                                echo "  3. After channel is created, come back and select option 4: Join Peers"
+                                echo ""
+                                print_info "Or create channel manually:"
+                                echo "  docker exec peer0.org1.ibn.vn peer channel create -o orderer.ibn.vn:7050 \\"
+                                echo "    -c ${channel_name} -f /path/to/${channel_name}.tx --tls \\"
+                                echo "    --cafile /etc/hyperledger/fabric/tls/ca.crt"
+                                return 1
+                            fi
                         fi
                     else
-                        # Method 2: Try to get channel info
-                        print_info "Method 2: Querying channel info from orderer..."
+                        # Try to query channel info directly
+                        print_info "Checking channel existence by querying orderer..."
                         local channel_info=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
                             -e CORE_PEER_TLS_ENABLED=true \
                             -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
@@ -1215,114 +1226,149 @@ join_fabric_peers() {
                             -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
                             -w /root \
                             "${first_peer}" \
-                            peer channel getinfo -c "${channel_name}" \
+                            timeout 10 peer channel getinfo -c "${channel_name}" \
                             -o "orderer.ibn.vn:7050" \
                             --tls \
                             --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
                         
-                        if echo "$channel_info" | grep -qiE "Blockchain info|height|block|channel"; then
+                        if echo "$channel_info" | grep -qi "Blockchain info\|height"; then
                             channel_exists=true
-                            print_success "Channel '${channel_name}' exists on orderer (verified by getinfo)"
-                        else
-                            # Method 3: Assume channel exists if creation was successful earlier
-                            # Check if we have any indication channel was created
-                            print_warning "Could not verify channel existence, but assuming it exists"
-                            print_info "Channel may have been created but not yet fully committed to orderer"
-                            print_info "Will attempt to join peers anyway (they will fetch block if channel exists)"
-                            echo ""
-                            echo -ne "${YELLOW}Continue with joining peers? (y/N): ${NC}"
-                            read -r response
-                            if [[ "$response" =~ ^[Yy]$ ]]; then
-                                channel_exists=true  # Allow to proceed
-                            else
-                                print_error "Channel '${channel_name}' verification failed"
-                                print_info "Please create the channel first using option 3"
-                                print_info "Or check channel status manually:"
-                                echo "  docker exec ${first_peer} peer channel list"
-                                return 1
-                            fi
+                            print_success "Channel '${channel_name}' exists on orderer"
                         fi
                     fi
-                else
-                    # Try to query channel info directly
-                    print_info "Checking channel existence by querying orderer..."
-                    local channel_info=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                        -e CORE_PEER_TLS_ENABLED=true \
-                        -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                        -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
-                        -w /root \
-                        "${first_peer}" \
-                        timeout 10 peer channel getinfo -c "${channel_name}" \
-                        -o "orderer.ibn.vn:7050" \
-                        --tls \
-                        --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
                     
-                    if echo "$channel_info" | grep -qi "Blockchain info\|height\|block"; then
-                        channel_exists=true
+                    if [ "$channel_exists" = true ]; then
                         print_success "Channel '${channel_name}' exists on orderer"
-                    fi
-                fi
-                
-                if [ "$channel_exists" = true ]; then
-                    print_success "Channel '${channel_name}' exists"
-                    print_info "Attempting to fetch genesis block from channel..."
-                    
-                    # Try to fetch genesis block (block 0)
-                    local fetch_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                        -e CORE_PEER_TLS_ENABLED=true \
-                        -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                        -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
-                        -w /root \
-                        "${first_peer}" \
-                        peer channel fetch 0 "${channel_name}_genesis.block" \
-                        -c "${channel_name}" \
-                        -o "orderer.ibn.vn:7050" \
-                        --tls \
-                        --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
-                    
-                    if echo "$fetch_output" | grep -qi "retrieved block\|Retrieved block"; then
-                        # Try to find the fetched block
-                        local fetched_block=$(docker exec "${first_peer}" find /root -name "${channel_name}_genesis.block" 2>/dev/null | head -1)
-                        if [ -n "$fetched_block" ]; then
-                            # Rename to standard name and copy
-                            docker exec "${first_peer}" mv "${fetched_block}" "/root/${channel_name}.block" 2>/dev/null
-                            if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
-                                print_success "Fetched and saved genesis block from channel"
-                                has_block_file=true
+                        print_info "Fetching genesis block from orderer to join peers..."
+                        
+                        # Copy orderer TLS CA to peer0 for fetching block
+                        local orderer_tls_ca="${project_root}/core/organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls/ca.crt"
+                        local orderer_tls_ca_in_container="/root/orderer-tls-ca.crt"
+                        
+                        if [ -f "${orderer_tls_ca}" ]; then
+                            if docker cp "${orderer_tls_ca}" "${first_peer}:${orderer_tls_ca_in_container}" 2>/dev/null; then
+                                print_info "Using orderer's TLS CA to fetch block..."
                             else
-                                print_warning "Fetched block but could not copy to host"
-                                print_info "Will proceed with joining peers (they can use block from container)"
+                                print_warning "Could not copy orderer TLS CA, will try with peer TLS CA"
+                                orderer_tls_ca_in_container="/etc/hyperledger/fabric/tls/ca.crt"
                             fi
                         else
-                            print_warning "Block fetched but could not locate in container"
-                            print_info "Will proceed with joining peers (they will fetch block automatically)"
+                            print_warning "Orderer TLS CA not found, will try with peer TLS CA"
+                            orderer_tls_ca_in_container="/etc/hyperledger/fabric/tls/ca.crt"
                         fi
-                    else
-                        print_warning "Could not fetch block, but channel exists"
-                        print_info "Peers can join channel without block file (they will fetch it automatically)"
-                        echo ""
-                        echo -ne "${YELLOW}Continue with joining peers? (y/N): ${NC}"
-                        read -r response
-                        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-                            print_info "Aborted by user"
+                        
+                        # Try multiple methods to fetch block
+                        local fetch_success=false
+                        local fetch_methods=("newest" "oldest" "0" "config")
+                        
+                        for fetch_method in "${fetch_methods[@]}"; do
+                            print_info "Trying to fetch block using method: ${fetch_method}..."
+                            
+                            local fetch_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                                -e CORE_PEER_TLS_ENABLED=true \
+                                -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                                -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+                                -w /root \
+                                "${first_peer}" \
+                                peer channel fetch ${fetch_method} "${channel_name}.block" \
+                                -c "${channel_name}" \
+                                -o "orderer.ibn.vn:7050" \
+                                --tls \
+                                --cafile "${orderer_tls_ca_in_container}" 2>&1)
+                            
+                            # Check if fetch was successful
+                            if echo "$fetch_output" | grep -qiE "retrieved block|Retrieved block|successfully|^[0-9]+"; then
+                                if docker exec "${first_peer}" test -f "/root/${channel_name}.block" 2>/dev/null; then
+                                    fetch_success=true
+                                    print_success "Block fetched successfully using method: ${fetch_method}"
+                                    
+                                    # Copy block to host
+                                    if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
+                                        print_success "Block file saved to ${channel_block}"
+                                        has_block_file=true
+                                        break
+                                    else
+                                        print_warning "Block fetched but could not copy to host"
+                                        print_info "Block is available in container, will use it for joining"
+                                        has_block_file=true
+                                        break
+                                    fi
+                                fi
+                            else
+                                # If failed with orderer CA, try with peer CA as fallback
+                                if [ "${orderer_tls_ca_in_container}" != "/etc/hyperledger/fabric/tls/ca.crt" ]; then
+                                    print_warning "Failed with orderer CA, trying peer CA..."
+                                    local fetch_output_fallback=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                                        -e CORE_PEER_TLS_ENABLED=true \
+                                        -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                                        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                                        -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+                                        -w /root \
+                                        "${first_peer}" \
+                                        peer channel fetch ${fetch_method} "${channel_name}.block" \
+                                        -c "${channel_name}" \
+                                        -o "orderer.ibn.vn:7050" \
+                                        --tls \
+                                        --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1)
+                                    
+                                    if echo "$fetch_output_fallback" | grep -qiE "retrieved block|Retrieved block|successfully|^[0-9]+"; then
+                                        if docker exec "${first_peer}" test -f "/root/${channel_name}.block" 2>/dev/null; then
+                                            fetch_success=true
+                                            print_success "Block fetched successfully using method: ${fetch_method} (with peer CA)"
+                                            
+                                            # Copy block to host
+                                            if docker cp "${first_peer}:/root/${channel_name}.block" "${channel_block}" 2>/dev/null; then
+                                                print_success "Block file saved to ${channel_block}"
+                                                has_block_file=true
+                                                break
+                                            else
+                                                print_warning "Block fetched but could not copy to host"
+                                                print_info "Block is available in container, will use it for joining"
+                                                has_block_file=true
+                                                break
+                                            fi
+                                        fi
+                                    else
+                                        print_warning "Failed to fetch block using method: ${fetch_method}"
+                                        echo "$fetch_output" | tail -5
+                                    fi
+                                else
+                                    print_warning "Failed to fetch block using method: ${fetch_method}"
+                                    echo "$fetch_output" | tail -5
+                                fi
+                            fi
+                        done
+                        
+                        # Cleanup orderer TLS CA
+                        if [ "${orderer_tls_ca_in_container}" != "/etc/hyperledger/fabric/tls/ca.crt" ]; then
+                            docker exec "${first_peer}" rm -f "${orderer_tls_ca_in_container}" 2>/dev/null
+                        fi
+                        
+                        if [ "$fetch_success" = false ]; then
+                            print_error "Failed to fetch block from orderer using all methods"
+                            print_error "Cannot join peers without block file"
+                            print_info "Last error output:"
+                            echo "$fetch_output" | tail -20
+                            print_info "Options:"
+                            echo "  1. Create channel again (option 3) to generate new block file"
+                            echo "  2. Manually fetch block: docker exec peer0.org1.ibn.vn peer channel fetch newest ${channel_name}.block -c ${channel_name} -o orderer.ibn.vn:7050 --tls --cafile /root/orderer-tls-ca.crt"
                             return 1
                         fi
+                        # Continue to join peers - block file is now available
+                    else
+                        print_error "Channel '${channel_name}' does not exist"
+                        print_info "Please create the channel first using option 3"
+                        print_info "Current channels:"
+                        echo "$channel_list_output" | grep -v "^$" | tail -5
+                        return 1
                     fi
-                    # Continue to join peers - don't return here
-                else
-                    print_error "Channel '${channel_name}' does not exist"
-                    print_info "Please create the channel first using option 3"
-                    print_info "Current channels:"
-                    echo "$channel_list_output" | grep -v "^$" | tail -5
-                    return 1
                 fi
+            else
+                print_error "Cannot retrieve block file. Peer container not running."
+                return 1
             fi
-        else
-            print_error "Cannot retrieve block file. Peer container not running."
-            return 1
-        fi
+        fi  # Close if CHANNEL_JUST_CREATED
     else
         print_success "Channel block file found: ${channel_block}"
         has_block_file=true
@@ -1387,13 +1433,28 @@ join_fabric_peers() {
             continue
         fi
         
-        # Copy block file to peer container if available
+        # Copy block file to peer container if available - REQUIRED for joining
         if [ "$has_block_file" = true ]; then
+            print_info "Copying block file to ${peer_name} container..."
             if docker cp "${channel_block}" "${peer_name}:/root/${channel_name}.block" 2>/dev/null; then
-                print_info "Block file copied to ${peer_name}"
+                print_success "Block file copied to ${peer_name}:/root/${channel_name}.block"
+                # Verify block file exists in container
+                if docker exec "${peer_name}" test -f "/root/${channel_name}.block" 2>/dev/null; then
+                    print_success "Block file verified in container"
+                else
+                    print_error "Block file copy failed - file not found in container"
+                    has_block_file=false
+                fi
             else
-                print_warning "Failed to copy block file, will try join without it..."
+                print_error "Failed to copy block file to ${peer_name}"
+                print_error "Peer cannot join without block file"
+                has_block_file=false
             fi
+        else
+            print_error "Block file not available - cannot join peer without it"
+            print_info "Please create channel first (option 3) to generate block file"
+            failed_peers+=("${peer_name}")
+            continue
         fi
         
         # Retry logic for joining
@@ -1420,60 +1481,14 @@ join_fabric_peers() {
                     -w /root \
                     "${peer_name}" \
                     peer channel join \
-                    -b "${channel_name}.block" \
-                    --timeout 30s 2>&1)
+                    -b "${channel_name}.block" 2>&1)
                 join_status=$?
             else
-                # Join without block file - peer will fetch from orderer
-                print_info "Joining without block file (peer will fetch from orderer)..."
-                join_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                    -e CORE_PEER_TLS_ENABLED=true \
-                    -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                    -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                    -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
-                    -w /root \
-                    "${peer_name}" \
-                    peer channel join \
-                    -b /dev/null \
-                    -c "${channel_name}" \
-                    -o "orderer.ibn.vn:7050" \
-                    --tls \
-                    --cafile "/etc/hyperledger/fabric/tls/ca.crt" \
-                    --timeout 30s 2>&1)
-                join_status=$?
-                
-                # If that doesn't work, try fetch then join
-                if [ $join_status -ne 0 ]; then
-                    print_info "Trying alternative method: fetch block then join..."
-                    # First fetch the genesis block
-                    docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                        -e CORE_PEER_TLS_ENABLED=true \
-                        -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                        -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
-                        -w /root \
-                        "${peer_name}" \
-                        peer channel fetch 0 "${channel_name}.block" \
-                        -c "${channel_name}" \
-                        -o "orderer.ibn.vn:7050" \
-                        --tls \
-                        --cafile "/etc/hyperledger/fabric/tls/ca.crt" 2>&1 > /dev/null
-                    
-                    # Then join using the fetched block
-                    if docker exec "${peer_name}" test -f "/root/${channel_name}.block" 2>/dev/null; then
-                        join_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
-                            -e CORE_PEER_TLS_ENABLED=true \
-                            -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                            -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
-                            -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
-                            -w /root \
-                            "${peer_name}" \
-                            peer channel join \
-                            -b "${channel_name}.block" \
-                            --timeout 30s 2>&1)
-                        join_status=$?
-                    fi
-                fi
+                # Cannot join without block file - peer channel join REQUIRES block file
+                print_error "Block file not available in container - cannot join"
+                print_error "This should not happen if block file was copied correctly"
+                join_status=1
+                join_output="Block file missing in container: /root/${channel_name}.block"
             fi
             
             if [ $join_status -eq 0 ]; then
@@ -1636,7 +1651,39 @@ deploy_fabric_chaincode() {
         print_info "Assuming chaincode is already built or using different language"
     fi
     
-    # Check if channel exists
+    # Check if at least one peer has joined the channel (required for chaincode deployment)
+    print_info "Verifying peers have joined channel ${channel_name}..."
+    local peers=("peer0.org1.ibn.vn:7051" "peer1.org1.ibn.vn:8051" "peer2.org1.ibn.vn:9051")
+    local joined_peers=0
+    
+    for peer_info in "${peers[@]}"; do
+        IFS=':' read -r peer_name peer_port <<< "${peer_info}"
+        if check_fabric_container "${peer_name}"; then
+            local channel_list=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                -e CORE_PEER_TLS_ENABLED=true \
+                -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
+                -w /root \
+                "${peer_name}" \
+                peer channel list 2>&1 | grep -i "${channel_name}" || echo "")
+            
+            if [ -n "$channel_list" ]; then
+                joined_peers=$((joined_peers + 1))
+            fi
+        fi
+    done
+    
+    if [ $joined_peers -eq 0 ]; then
+        print_error "No peers have joined channel ${channel_name}"
+        print_error "Cannot deploy chaincode without peers in channel"
+        print_info "Please join peers to channel first (option 4)"
+        return 1
+    fi
+    
+    print_success "${joined_peers} peer(s) have joined channel ${channel_name}"
+    
+    # Check if peer containers are running
     if ! check_fabric_container "peer0.org1.ibn.vn"; then
         print_error "Peer containers are not running. Please start the network first."
         return 1
@@ -1937,16 +1984,44 @@ bootstrap_network() {
     print_header "Step 2/3: Join Peers to Channel"
     echo ""
     if ! join_fabric_peers "${channel_name}" 3; then
-        print_warning "Some peers failed to join, but continuing with chaincode deployment..."
-        echo ""
-        echo -ne "${YELLOW}Do you want to continue with chaincode deployment? (y/N): ${NC}"
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            print_info "Bootstrap aborted by user"
-            return 1
-        fi
+        print_error "Failed to join peers to channel"
+        print_error "Cannot deploy chaincode without peers in channel"
+        print_info "Please fix peer joining issues first, then deploy chaincode manually (option 5)"
+        return 1
     fi
     
+    # Verify at least one peer has joined
+    print_info "Verifying peers have joined channel..."
+    local joined_count=0
+    local peers=("peer0.org1.ibn.vn:7051" "peer1.org1.ibn.vn:8051" "peer2.org1.ibn.vn:9051")
+    
+    for peer_info in "${peers[@]}"; do
+        IFS=':' read -r peer_name peer_port <<< "${peer_info}"
+        if check_fabric_container "${peer_name}"; then
+            local channel_list=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+                -e CORE_PEER_TLS_ENABLED=true \
+                -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
+                -w /root \
+                "${peer_name}" \
+                peer channel list 2>&1 | grep -i "${channel_name}" || echo "")
+            
+            if [ -n "$channel_list" ]; then
+                joined_count=$((joined_count + 1))
+                print_success "${peer_name} is in channel ${channel_name}"
+            fi
+        fi
+    done
+    
+    if [ $joined_count -eq 0 ]; then
+        print_error "No peers have joined channel ${channel_name}"
+        print_error "Cannot deploy chaincode without peers in channel"
+        print_info "Please join peers first (option 4), then deploy chaincode (option 5)"
+        return 1
+    fi
+    
+    print_success "${joined_count} peer(s) have joined channel ${channel_name}"
     echo ""
     print_info "Waiting for peers to sync..."
     sleep 3
