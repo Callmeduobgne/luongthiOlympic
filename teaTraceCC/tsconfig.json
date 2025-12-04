@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 {
   "compilerOptions": {
     "module": "commonjs",
@@ -16,24 +15,3 @@
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]
 }
-
-=======
-{
-  "compilerOptions": {
-    "module": "commonjs",
-    "target": "es2019",
-    "outDir": "dist",
-    "rootDir": "src",
-    "moduleResolution": "node",
-    "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "strict": true,
-    "sourceMap": true,
-    "forceConsistentCasingInFileNames": true,
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
-}
-
->>>>>>> a8e22501ad4e0eabb60ad50615b06815c01724dc

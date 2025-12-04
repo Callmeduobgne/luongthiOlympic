@@ -240,6 +240,21 @@ npm run build
 
 # Copy file cấu hình MSP vào thư mục dist
 cp msp-config.json dist/
+
+# Copy package.json vào dist/ (QUAN TRỌNG: Node.js chaincode cần package.json)
+cp package.json dist/
+
+# Regenerate package-lock.json trong dist/ để đồng bộ với package.json
+# (QUAN TRỌNG: npm ci yêu cầu lock file đồng bộ với package.json)
+# Sử dụng --omit=dev để chỉ có production dependencies (giống như Fabric build)
+cd dist/
+rm -f package-lock.json
+npm install --omit=dev --package-lock-only
+cd ..
+
+# Kiểm tra cấu trúc chaincode (đảm bảo có đủ file)
+ls -la dist/
+# Phải có: index.js, package.json, package-lock.json, msp-config.json, và các file models/, utils/
 ```
 
 ### 9.2. Package Chaincode
@@ -250,34 +265,179 @@ Tạo package file cho chaincode:
 # Quay về thư mục gốc
 cd ..
 
+# Kiểm tra Docker daemon đang chạy (QUAN TRỌNG để tránh lỗi "broken pipe")
+docker ps > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "❌ Docker daemon không chạy. Vui lòng khởi động Docker trước."
+    exit 1
+fi
+
+# Tạo thư mục chaincode trong container peer0 (nếu chưa tồn tại)
+docker exec peer0.org1.ibn.vn mkdir -p /opt/chaincode
+
+# Xóa thư mục cũ nếu có (tránh conflict)
+docker exec peer0.org1.ibn.vn rm -rf /opt/chaincode/teaTraceCC
+
 # Copy thư mục dist vào container peer0 để package
 docker cp teaTraceCC/dist peer0.org1.ibn.vn:/opt/chaincode/teaTraceCC
 
-# Package chaincode
-docker exec peer0.org1.ibn.vn peer lifecycle chaincode package teaTraceCC.tar.gz \
+# Kiểm tra file đã được copy đúng (đảm bảo có package.json)
+docker exec peer0.org1.ibn.vn ls -la /opt/chaincode/teaTraceCC/ | grep package.json
+if [ $? -ne 0 ]; then
+    echo "❌ Lỗi: package.json không có trong dist/. Vui lòng kiểm tra lại bước 9.1."
+    exit 1
+fi
+
+# Package chaincode (với đầy đủ environment variables)
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+  -w /opt/chaincode \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode package teaTraceCC.tar.gz \
   --path /opt/chaincode/teaTraceCC \
   --lang node \
   --label teaTraceCC_1.1.0
 
+# Kiểm tra package file đã được tạo
+if [ $? -ne 0 ]; then
+    echo "❌ Lỗi: Không thể tạo package file. Kiểm tra lại cấu trúc chaincode."
+    exit 1
+fi
+
 # Copy package file ra ngoài để dùng cho các peer khác
 docker cp peer0.org1.ibn.vn:/opt/chaincode/teaTraceCC.tar.gz ./teaTraceCC.tar.gz
+
+# Kiểm tra file đã được copy ra ngoài
+if [ ! -f ./teaTraceCC.tar.gz ]; then
+    echo "❌ Lỗi: Không thể copy package file ra ngoài."
+    exit 1
+fi
+
+echo "✅ Package file đã được tạo: ./teaTraceCC.tar.gz"
+ls -lh ./teaTraceCC.tar.gz
 ```
 
 ### 9.3. Install Chaincode trên các Peers
 
 Cài đặt chaincode trên tất cả các peers:
 
+**⚠️ LƯU Ý QUAN TRỌNG:** 
+- Quá trình install có thể mất **2-5 phút** cho mỗi peer (do build Docker image)
+- Nếu gặp lỗi "broken pipe", đây thường là lỗi timeout - cần retry
+- Đảm bảo Docker daemon đang chạy và có đủ resources
+
 ```bash
+# Kiểm tra package file tồn tại
+if [ ! -f ./teaTraceCC.tar.gz ]; then
+    echo "❌ Lỗi: File teaTraceCC.tar.gz không tồn tại. Vui lòng chạy lại bước 9.2."
+    exit 1
+fi
+
+# Kiểm tra Docker daemon và peer containers
+echo "🔍 Kiểm tra Docker daemon và peer containers..."
+if ! docker ps > /dev/null 2>&1; then
+    echo "❌ Docker daemon không chạy. Vui lòng khởi động Docker trước."
+    exit 1
+fi
+
+if ! docker ps | grep -q "peer0.org1.ibn.vn"; then
+    echo "❌ Peer containers không chạy. Vui lòng khởi động network trước (docker compose up -d)."
+    exit 1
+fi
+
+echo "✅ Docker daemon và peer containers đang chạy"
+echo ""
+
+# Tạo thư mục chaincode cho các peers (nếu chưa tồn tại)
+docker exec peer0.org1.ibn.vn mkdir -p /opt/chaincode
+docker exec peer1.org1.ibn.vn mkdir -p /opt/chaincode
+docker exec peer2.org1.ibn.vn mkdir -p /opt/chaincode
+
+# Copy Admin MSP vào các peers (cần Admin MSP để có quyền install chaincode)
+docker cp core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp peer0.org1.ibn.vn:/tmp/admin_msp
+docker cp core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp peer1.org1.ibn.vn:/tmp/admin_msp
+docker cp core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp peer2.org1.ibn.vn:/tmp/admin_msp
+
+# Hàm install với retry mechanism
+install_chaincode() {
+    local peer_name=$1
+    local peer_port=$2
+    local package_path=$3
+    local max_retries=3
+    local retry_count=0
+    
+    while [ $retry_count -lt $max_retries ]; do
+        echo "📦 Installing chaincode on ${peer_name} (attempt $((retry_count + 1))/${max_retries})..."
+        
+        # Install với timeout 5 phút
+        if timeout 300 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+          -e CORE_PEER_TLS_ENABLED=true \
+          -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+          -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+          -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
+          -w /opt/chaincode \
+          ${peer_name} \
+          peer lifecycle chaincode install ${package_path} 2>&1; then
+            echo "✅ Installed on ${peer_name}"
+            return 0
+        else
+            retry_count=$((retry_count + 1))
+            if [ $retry_count -lt $max_retries ]; then
+                echo "⚠️  Install failed, retrying in 10 seconds..."
+                sleep 10
+            else
+                echo "❌ Failed to install on ${peer_name} after ${max_retries} attempts"
+                return 1
+            fi
+        fi
+    done
+}
+
 # Install trên Peer0
-docker exec peer0.org1.ibn.vn peer lifecycle chaincode install teaTraceCC.tar.gz
+install_chaincode "peer0.org1.ibn.vn" "7051" "teaTraceCC.tar.gz"
+INSTALL_PEER0=$?
+echo ""
 
 # Install trên Peer1
 docker cp teaTraceCC.tar.gz peer1.org1.ibn.vn:/opt/chaincode/
-docker exec peer1.org1.ibn.vn peer lifecycle chaincode install /opt/chaincode/teaTraceCC.tar.gz
+install_chaincode "peer1.org1.ibn.vn" "8051" "/opt/chaincode/teaTraceCC.tar.gz"
+INSTALL_PEER1=$?
+echo ""
 
 # Install trên Peer2
 docker cp teaTraceCC.tar.gz peer2.org1.ibn.vn:/opt/chaincode/
-docker exec peer2.org1.ibn.vn peer lifecycle chaincode install /opt/chaincode/teaTraceCC.tar.gz
+install_chaincode "peer2.org1.ibn.vn" "9051" "/opt/chaincode/teaTraceCC.tar.gz"
+INSTALL_PEER2=$?
+echo ""
+
+# Tóm tắt kết quả
+echo "📊 Tóm tắt kết quả install:"
+if [ $INSTALL_PEER0 -eq 0 ]; then echo "  ✅ peer0.org1.ibn.vn"; else echo "  ❌ peer0.org1.ibn.vn"; fi
+if [ $INSTALL_PEER1 -eq 0 ]; then echo "  ✅ peer1.org1.ibn.vn"; else echo "  ❌ peer1.org1.ibn.vn"; fi
+if [ $INSTALL_PEER2 -eq 0 ]; then echo "  ✅ peer2.org1.ibn.vn"; else echo "  ❌ peer2.org1.ibn.vn"; fi
+
+# Kiểm tra ít nhất 1 peer đã install thành công
+if [ $INSTALL_PEER0 -ne 0 ] && [ $INSTALL_PEER1 -ne 0 ] && [ $INSTALL_PEER2 -ne 0 ]; then
+    echo ""
+    echo "❌ Không thể install chaincode trên bất kỳ peer nào."
+    echo "💡 Xem phần Troubleshooting (mục 9.8) để xử lý lỗi."
+    exit 1
+fi
+
+# Query package ID từ peer đã install thành công
+echo ""
+echo "🔍 Querying installed chaincode để lấy PACKAGE_ID..."
+if [ $INSTALL_PEER0 -eq 0 ]; then
+    docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+      -e CORE_PEER_TLS_ENABLED=true \
+      -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+      -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+      -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+      peer0.org1.ibn.vn \
+      peer lifecycle chaincode queryinstalled | grep "teaTraceCC_1.1.0"
+fi
 ```
 
 **Lưu ý:** Sau mỗi lệnh install, lưu lại **PACKAGE_ID** từ output. Ví dụ:
@@ -297,7 +457,7 @@ PACKAGE_ID="teaTraceCC_1.1.0:abc123def456..."  # Thay bằng PACKAGE_ID thực t
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer lifecycle chaincode approveformyorg \
@@ -321,7 +481,7 @@ Commit chaincode definition lên channel:
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer lifecycle chaincode commit \
@@ -350,7 +510,7 @@ Kiểm tra chaincode đã được commit thành công:
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer lifecycle chaincode querycommitted --channelID ibnchannel
@@ -365,7 +525,7 @@ Nếu thấy output có `teaTraceCC` với version `1.1.0`, chaincode đã đư�
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer chaincode invoke \
@@ -385,7 +545,7 @@ docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer chaincode query \
@@ -399,7 +559,7 @@ docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
   -e CORE_PEER_TLS_ENABLED=true \
   -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
   -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
   peer0.org1.ibn.vn \
   peer chaincode query \
@@ -413,7 +573,160 @@ docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
 **Lưu ý:**
 - Chaincode teaTraceCC sử dụng **Node.js**, không phải Golang
 - Cần build TypeScript trước khi package
-- File `msp-config.json` phải được copy vào thư mục `dist/` trước khi package
+- File `msp-config.json` và `package.json` phải được copy vào thư mục `dist/` trước khi package
 - PACKAGE_ID sẽ khác nhau mỗi lần install, cần lưu lại để dùng cho approve
 - Channel name: `ibnchannel`
 - MSP ID: `Org1MSP`
+
+### 9.8. Troubleshooting - Lỗi "broken pipe"
+
+Nếu gặp lỗi `write unix @->/run/docker.sock: write: broken pipe` khi install chaincode:
+
+**Nguyên nhân chính:**
+- **Timeout trong quá trình build Docker image** (phổ biến nhất)
+- Docker daemon bị disconnect hoặc quá tải
+- Chaincode package thiếu file quan trọng (package.json, package-lock.json)
+- Peer container không có đủ resources để build image
+
+**Giải pháp theo thứ tự ưu tiên:**
+
+#### 1. **Retry với timeout dài hơn (Thử ngay)**
+Hướng dẫn đã có retry mechanism tự động (3 lần), nhưng nếu vẫn fail:
+
+```bash
+# Thử install lại với timeout 5 phút
+timeout 300 docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  -w /opt/chaincode \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode install teaTraceCC.tar.gz
+```
+
+#### 2. **Kiểm tra và cleanup Docker resources**
+```bash
+# Kiểm tra Docker system resources
+docker system df
+
+# Cleanup unused Docker resources (cẩn thận - sẽ xóa unused images/containers)
+docker system prune -f
+
+# Kiểm tra Docker daemon
+docker ps
+# Nếu lỗi, khởi động lại Docker: 
+# Linux: sudo systemctl restart docker
+# Windows: Restart Docker Desktop
+```
+
+#### 3. **Kiểm tra package file và cấu trúc**
+```bash
+# Kiểm tra file tồn tại và không bị corrupt
+ls -lh ./teaTraceCC.tar.gz
+file ./teaTraceCC.tar.gz
+# Phải là: gzip compressed data
+
+# Kiểm tra cấu trúc bên trong package
+tar -tzf teaTraceCC.tar.gz | head -5
+# Phải có: metadata.json, code.tar.gz
+
+# Extract và kiểm tra code.tar.gz
+mkdir -p /tmp/check_package
+cd /tmp/check_package
+tar -xzf /mnt/e/luongbeo/teaTraceCC.tar.gz
+tar -tzf code.tar.gz | grep -E "(package\.json|index\.js|package-lock\.json)" | head -5
+# Phải có: package.json, package-lock.json, index.js (hoặc src/index.js)
+```
+
+#### 4. **Kiểm tra peer containers và logs**
+```bash
+# Kiểm tra peer containers đang chạy và healthy
+docker ps | grep peer
+# Phải thấy peer0, peer1, peer2 với status "Up" và "(healthy)"
+
+# Kiểm tra logs của peer container để tìm lỗi chi tiết
+docker logs peer0.org1.ibn.vn --tail 100 | grep -E "(chaincode|error|failed|broken|npm|docker)" -i
+
+# Kiểm tra logs của Docker build process
+docker logs peer0.org1.ibn.vn --tail 200 | grep -A 20 "buildImage"
+```
+
+#### 5. **Restart peer container (nếu cần)**
+```bash
+# Restart peer container
+docker restart peer0.org1.ibn.vn
+
+# Đợi container khởi động lại (30 giây)
+echo "Đợi peer container khởi động lại..."
+sleep 30
+
+# Kiểm tra container đã sẵn sàng
+docker exec peer0.org1.ibn.vn peer version
+
+# Thử install lại
+```
+
+#### 6. **Kiểm tra Docker socket permissions (Linux only)**
+```bash
+# Kiểm tra quyền truy cập Docker socket
+ls -la /var/run/docker.sock
+# Phải có quyền: srw-rw----
+
+# Nếu không có quyền, thêm user vào docker group
+sudo usermod -aG docker $USER
+# Logout và login lại để áp dụng thay đổi
+```
+
+#### 7. **Kiểm tra package-lock.json đã sync**
+```bash
+# Vào thư mục dist và kiểm tra
+cd teaTraceCC/dist
+
+# Kiểm tra package.json và package-lock.json có sync không
+npm ls --depth=0 2>&1 | head -10
+# Nếu có lỗi về version mismatch, regenerate package-lock.json:
+rm -f package-lock.json
+npm install --omit=dev --package-lock-only
+
+# Quay lại và package lại
+cd ../..
+# Chạy lại bước 9.2
+```
+
+#### 8. **Kiểm tra Docker build images đang chạy**
+```bash
+# Xem có Docker build process nào đang chạy không
+docker ps -a | grep -E "(build|chaincode)"
+
+# Xem Docker images liên quan đến chaincode
+docker images | grep -E "(dev-peer|chaincode|teaTraceCC)"
+```
+
+#### 9. **Giải pháp cuối cùng: Clean install**
+Nếu tất cả các bước trên không giải quyết được:
+
+```bash
+# 1. Xóa package file cũ
+rm -f ./teaTraceCC.tar.gz
+
+# 2. Xóa thư mục dist và rebuild
+cd teaTraceCC
+rm -rf dist
+npm run build
+cp msp-config.json dist/
+cp package.json dist/
+cd dist/
+rm -f package-lock.json
+npm install --omit=dev --package-lock-only
+cd ../..
+
+# 3. Chạy lại từ bước 9.2 (Package Chaincode)
+# 4. Chạy lại bước 9.3 (Install Chaincode) với retry mechanism
+```
+
+**Lưu ý quan trọng:**
+- Lỗi "broken pipe" thường xảy ra do **timeout** trong quá trình build Docker image
+- Quá trình install có thể mất **2-5 phút** cho mỗi peer
+- Hướng dẫn đã có **retry mechanism tự động** (3 lần với timeout 5 phút mỗi lần)
+- Nếu vẫn fail sau 3 lần retry, kiểm tra Docker resources và logs

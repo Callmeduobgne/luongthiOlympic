@@ -661,6 +661,192 @@ EOF
     fi
 }
 
+# Fix TLS CA cross-reference for orderers and peers to trust each other
+fix_tls_ca_references() {
+    print_info "Đang cấu hình TLS CA cross-references..."
+    
+    local orgs_dir="$1"
+    local orderer_tls_ca="${orgs_dir}/ordererOrganizations/ibn.vn/tlsca/tlsca.ibn.vn-cert.pem"
+    local peer_tls_ca="${orgs_dir}/peerOrganizations/org1.ibn.vn/tlsca/tlsca.org1.ibn.vn-cert.pem"
+    
+    # Check if TLS CA certs exist
+    if [ ! -f "$orderer_tls_ca" ]; then
+        print_warning "Orderer TLS CA not found: $orderer_tls_ca"
+        return 1
+    fi
+    
+    if [ ! -f "$peer_tls_ca" ]; then
+        print_warning "Peer TLS CA not found: $peer_tls_ca"
+        return 1
+    fi
+    
+    # Copy Orderer TLS CA to Peer MSP tlscacerts (so peers trust orderers)
+    print_info "Copying Orderer TLS CA to Peer MSP..."
+    local peer_msp_tlsca="${orgs_dir}/peerOrganizations/org1.ibn.vn/msp/tlscacerts"
+    mkdir -p "$peer_msp_tlsca"
+    cp "$orderer_tls_ca" "$peer_msp_tlsca/tlsca.ibn.vn-cert.pem"
+    
+    # Copy Peer TLS CA to Orderer MSP tlscacerts (so orderers trust peers)
+    print_info "Copying Peer TLS CA to Orderer MSP..."
+    local orderer_msp_tlsca="${orgs_dir}/ordererOrganizations/ibn.vn/msp/tlscacerts"
+    mkdir -p "$orderer_msp_tlsca"
+    cp "$peer_tls_ca" "$orderer_msp_tlsca/tlsca.org1.ibn.vn-cert.pem"
+    
+    # Also copy to each peer's MSP tlscacerts
+    for peer in peer0 peer1 peer2; do
+        local peer_node_msp="${orgs_dir}/peerOrganizations/org1.ibn.vn/peers/${peer}.org1.ibn.vn/msp/tlscacerts"
+        if [ -d "${orgs_dir}/peerOrganizations/org1.ibn.vn/peers/${peer}.org1.ibn.vn" ]; then
+            mkdir -p "$peer_node_msp"
+            cp "$orderer_tls_ca" "$peer_node_msp/tlsca.ibn.vn-cert.pem"
+            print_success "Updated TLS CA for ${peer}.org1.ibn.vn"
+        fi
+    done
+    
+    # Copy to each orderer's MSP tlscacerts
+    for orderer in orderer orderer1 orderer2; do
+        local orderer_node_msp="${orgs_dir}/ordererOrganizations/ibn.vn/orderers/${orderer}.ibn.vn/msp/tlscacerts"
+        if [ -d "${orgs_dir}/ordererOrganizations/ibn.vn/orderers/${orderer}.ibn.vn" ]; then
+            mkdir -p "$orderer_node_msp"
+            cp "$peer_tls_ca" "$orderer_node_msp/tlsca.org1.ibn.vn-cert.pem"
+            print_success "Updated TLS CA for ${orderer}.ibn.vn"
+        fi
+    done
+    
+    print_success "TLS CA cross-references configured successfully"
+    return 0
+}
+
+# Verify TLS certificates consistency
+verify_tls_certificates() {
+    print_info "Đang verify TLS certificates..."
+    
+    local orgs_dir="$1"
+    local errors=0
+    
+    # Verify orderer certificates
+    for orderer in orderer orderer1 orderer2; do
+        local cert="${orgs_dir}/ordererOrganizations/ibn.vn/orderers/${orderer}.ibn.vn/tls/server.crt"
+        if [ ! -f "$cert" ]; then
+            print_error "Missing TLS cert for ${orderer}.ibn.vn"
+            errors=$((errors + 1))
+        else
+            # Check if cert has correct SAN (Subject Alternative Name)
+            if command -v openssl &> /dev/null; then
+                local sans=$(openssl x509 -in "$cert" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1)
+                if echo "$sans" | grep -q "${orderer}.ibn.vn"; then
+                    print_success "✓ ${orderer}.ibn.vn certificate valid"
+                else
+                    print_warning "⚠ ${orderer}.ibn.vn certificate may have hostname mismatch"
+                fi
+            fi
+        fi
+    done
+    
+    # Verify peer certificates
+    for peer in peer0 peer1 peer2; do
+        local cert="${orgs_dir}/peerOrganizations/org1.ibn.vn/peers/${peer}.org1.ibn.vn/tls/server.crt"
+        if [ ! -f "$cert" ]; then
+            print_error "Missing TLS cert for ${peer}.org1.ibn.vn"
+            errors=$((errors + 1))
+        else
+            if command -v openssl &> /dev/null; then
+                local sans=$(openssl x509 -in "$cert" -noout -text 2>/dev/null | grep -A1 "Subject Alternative Name" | tail -1)
+                if echo "$sans" | grep -q "${peer}.org1.ibn.vn"; then
+                    print_success "✓ ${peer}.org1.ibn.vn certificate valid"
+                else
+                    print_warning "⚠ ${peer}.org1.ibn.vn certificate may have hostname mismatch"
+                fi
+            fi
+        fi
+    done
+    
+    if [ $errors -eq 0 ]; then
+        print_success "✅ All TLS certificates verified"
+        return 0
+    else
+        print_error "❌ Found $errors TLS certificate errors"
+        return 1
+    fi
+}
+
+# Wait for Fabric network to be fully ready after container start
+wait_for_fabric_network() {
+    print_info "Đang chờ Fabric network sẵn sàng..."
+    local max_wait=180  # 3 minutes max
+    local elapsed=0
+    local check_interval=10
+    
+    # Wait for orderers to establish Raft cluster
+    print_info "Checking orderer Raft cluster formation..."
+    while [ $elapsed -lt $max_wait ]; do
+        # Check if orderer logs show cluster is ready
+        local orderer_ready=$(docker logs orderer.ibn.vn 2>&1 | grep -c "Raft leader changed.*channel=system-channel" 2>/dev/null | head -1)
+        orderer_ready=${orderer_ready:-0}  # Default to 0 if empty
+        if [ "$orderer_ready" -gt 0 ] 2>/dev/null; then
+            print_success "✓ Orderer Raft cluster formed"
+            break
+        fi
+        
+        echo -n "."
+        sleep $check_interval
+        elapsed=$((elapsed + check_interval))
+    done
+    echo ""
+    
+    if [ $elapsed -ge $max_wait ]; then
+        print_warning "Orderer cluster formation timeout, but continuing..."
+    fi
+    
+    # Wait for peers to connect via gossip
+    print_info "Checking peer gossip connections..."
+    elapsed=0
+    while [ $elapsed -lt $max_wait ]; do
+        local peer_connected=$(docker logs peer0.org1.ibn.vn 2>&1 | grep -c "Membership view has changed" 2>/dev/null | head -1)
+        peer_connected=${peer_connected:-0}  # Default to 0 if empty
+        if [ "$peer_connected" -gt 0 ] 2>/dev/null; then
+            print_success "✓ Peer gossip network established"
+            break
+        fi
+        
+        echo -n "."
+        sleep $check_interval
+        elapsed=$((elapsed + check_interval))
+    done
+    echo ""
+    
+    if [ $elapsed -ge $max_wait ]; then
+        print_warning "Peer gossip timeout, but continuing..."
+    fi
+    
+    # Final check: No critical TLS errors in last 30 seconds of logs
+    print_info "Checking for TLS errors..."
+    local tls_errors=0
+    for container in orderer.ibn.vn orderer1.ibn.vn orderer2.ibn.vn peer0.org1.ibn.vn peer1.org1.ibn.vn peer2.org1.ibn.vn; do
+        # Check if container is running first
+        if ! docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+            print_warning "Container $container is not running, skipping TLS check"
+            continue
+        fi
+        
+        local recent_tls_errors=$(docker logs --since 30s "$container" 2>&1 | grep -c "tls: failed to verify certificate" 2>/dev/null | head -1)
+        recent_tls_errors=${recent_tls_errors:-0}  # Default to 0 if empty
+        
+        if [ "$recent_tls_errors" -gt 5 ] 2>/dev/null; then
+            print_error "⚠ Container $container có nhiều TLS errors: $recent_tls_errors"
+            tls_errors=$((tls_errors + 1))
+        fi
+    done
+    
+    if [ $tls_errors -eq 0 ]; then
+        print_success "✅ No critical TLS errors detected"
+        return 0
+    else
+        print_error "❌ Detected TLS errors in $tls_errors containers"
+        print_warning "Network may not be stable. Check logs with option 7."
+        return 1
+    fi
+}
+
 # Generate crypto material using cryptogen
 generate_crypto_material() {
     print_info "Đang tạo crypto material..."
@@ -668,15 +854,25 @@ generate_crypto_material() {
     local core_dir="$1"
     local crypto_config="${core_dir}/crypto-config.yaml"
     local output_dir="${core_dir}/organizations"
+    local genesis_dir="${core_dir}/system-genesis-block"
+    local genesis_block="${genesis_dir}/genesis.block"
     
     if [ ! -f "$crypto_config" ]; then
         print_error "Không tìm thấy file config: $crypto_config"
         return 1
     fi
     
-    # Remove existing directory to ensure clean generation
+    # CRITICAL: Remove existing crypto material AND genesis block
+    # Genesis block contains certificates, so it must be regenerated when crypto changes
     if [ -d "$output_dir" ]; then
+        print_warning "Removing existing crypto material..."
         rm -rf "$output_dir"
+    fi
+    
+    # Also remove genesis block if it exists (will be regenerated after crypto)
+    if [ -f "$genesis_block" ]; then
+        print_warning "Removing existing genesis block (will be regenerated with new certificates)..."
+        rm -f "$genesis_block"
     fi
     
     # Try local cryptogen first
@@ -685,6 +881,8 @@ generate_crypto_material() {
         if cryptogen generate --config="$crypto_config" --output="$output_dir"; then
             print_success "Đã tạo crypto material thành công (local)"
             create_nodeou_configs "$output_dir"
+            fix_tls_ca_references "$output_dir"
+            verify_tls_certificates "$output_dir"
             return 0
         fi
     fi
@@ -699,6 +897,8 @@ generate_crypto_material() {
             cryptogen generate --config=crypto-config.yaml --output=organizations; then
             print_success "Đã tạo crypto material thành công (Docker)"
             create_nodeou_configs "$output_dir"
+            fix_tls_ca_references "$output_dir"
+            verify_tls_certificates "$output_dir"
             return 0
         fi
     fi
@@ -717,6 +917,12 @@ generate_genesis_block() {
     # Profile name matches core/configtx/configtx.yaml
     local profile="RaftOrdererGenesis"
     local channel_id="system-channel"
+    
+    # CRITICAL: Remove old genesis block to prevent certificate mismatch
+    if [ -f "$genesis_block" ]; then
+        print_warning "Removing existing genesis block to prevent certificate mismatch..."
+        rm -f "$genesis_block"
+    fi
     
     mkdir -p "$genesis_dir"
     
@@ -1107,6 +1313,24 @@ join_fabric_peers() {
     local first_peer="peer0.org1.ibn.vn"
     local channel_block="core/channel-artifacts/${channel_name}.block"
     
+    # Step 0: Copy Admin MSP to all peers (required for join operation)
+    print_info "Step 0: Copying Admin MSP to peers..."
+    local admin_msp_source="core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp"
+    
+    if [ ! -d "$admin_msp_source" ]; then
+        print_error "Admin MSP not found: $admin_msp_source"
+        return 1
+    fi
+    
+    for peer in peer0.org1.ibn.vn peer1.org1.ibn.vn peer2.org1.ibn.vn; do
+        if docker ps --format '{{.Names}}' | grep -q "^${peer}$"; then
+            docker exec "$peer" rm -rf /tmp/admin_msp 2>/dev/null || true
+            docker cp "$admin_msp_source" "${peer}:/tmp/admin_msp"
+            print_success "✓ Admin MSP copied to $peer"
+        fi
+    done
+    echo ""
+    
     # Step 1: Ensure we have the block file on host
     print_info "Step 1: Verifying channel block file..."
     if [ ! -f "${channel_block}" ]; then
@@ -1221,12 +1445,12 @@ join_fabric_peers() {
                 sleep 2
             fi
             
-            # Execute join command
+            # Execute join command (use Admin MSP for proper authorization)
             local join_output=$(docker exec \
                 -e CORE_PEER_LOCALMSPID="Org1MSP" \
                 -e CORE_PEER_TLS_ENABLED=true \
                 -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
                 -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
                 -w /root \
                 "${peer_name}" \
@@ -1303,31 +1527,46 @@ query_installed_chaincode() {
     
     print_info "Querying installed chaincode on ${peer_name}..."
     
+    # Use Admin MSP for lifecycle queries (required for ACL)
     local output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+        -e CORE_PEER_ADDRESS="${peer_name}:7051" \
         -w /root \
         "${peer_name}" \
         peer lifecycle chaincode queryinstalled 2>&1)
     
     if [ $? -ne 0 ]; then
-        print_error "Failed to query installed chaincode on ${peer_name}"
-        return 1
+        print_warning "Failed to query installed chaincode on ${peer_name} (may need Admin MSP)"
+        # Try to extract from error message or output anyway
+        echo "$output" | tail -10
     fi
     
-    # Extract package ID from output
-    # Format: "Installed chaincodes on peer:\nPackage ID: basic_1.0:abc123..., Label: basic_1.0"
-    local package_id=$(echo "$output" | grep -i "Package ID" | grep -i "${chaincode_label}" | head -1 | sed -n 's/.*Package ID: \([^,]*\).*/\1/p' | tr -d ' ')
+    # Extract package ID from output - try multiple formats
+    local package_id=""
     
+    # Format 1: "Package ID: basic_1.0:abc123..., Label: basic_1.0"
+    package_id=$(echo "$output" | grep -i "Package ID" | grep -i "${chaincode_label}" | head -1 | sed -n 's/.*Package ID: *\([^,]*\).*/\1/p' | tr -d ' ' | tr -d "'" | tr -d '"')
+    
+    # Format 2: Look for label:hash pattern (64+ hex chars)
     if [ -z "$package_id" ]; then
-        # Try alternative format
-        package_id=$(echo "$output" | grep -i "${chaincode_label}" | grep -oE '[a-zA-Z0-9_]+:[a-f0-9]+' | head -1)
+        package_id=$(echo "$output" | grep -i "${chaincode_label}" | grep -oE '[a-zA-Z0-9_]+:[a-f0-9]{64,}' | head -1)
+    fi
+    
+    # Format 3: "Installed remotely: response:<status:200 payload:"\nEteaTraceCC_1.0:hash..."
+    if [ -z "$package_id" ]; then
+        package_id=$(echo "$output" | grep -oE "${chaincode_label}:[a-f0-9]{64,}" | head -1)
+    fi
+    
+    # Format 4: "Installed chaincode with package ID 'teaTraceCC_1.0:hash...'"
+    if [ -z "$package_id" ]; then
+        package_id=$(echo "$output" | grep -oE "package ID ['\"]?${chaincode_label}:[a-f0-9]+" | sed "s/.*package ID ['\"]\?//i" | head -1)
     fi
     
     if [ -z "$package_id" ]; then
         print_warning "Could not extract package ID from output"
-        echo "$output" | tail -20
+        # Don't return error, just warn - package ID might be extracted from install output
         return 1
     fi
     
@@ -1345,10 +1584,20 @@ check_commit_readiness() {
     
     print_info "Checking commit readiness on ${peer_name}..."
     
+    # Extract peer port from peer name
+    local peer_port="7051"
+    case "${peer_name}" in
+        peer1.org1.ibn.vn) peer_port="8051" ;;
+        peer2.org1.ibn.vn) peer_port="9051" ;;
+        *) peer_port="7051" ;;
+    esac
+    
+    # Use Admin MSP for lifecycle queries (required for ACL)
     local output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+        -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
         -w /root \
         "${peer_name}" \
         peer lifecycle chaincode checkcommitreadiness \
@@ -1394,16 +1643,47 @@ deploy_fabric_chaincode() {
     print_header "Deploy Chaincode: ${chaincode_name} v${chaincode_version}"
     echo ""
     
-    # Validate chaincode path
-    if [ ! -d "${chaincode_path}" ]; then
+    # Resolve absolute path for chaincode FIRST (before validation)
+    local abs_chaincode_path
+    if [[ "${chaincode_path}" == /* ]]; then
+        abs_chaincode_path="${chaincode_path}"
+    else
+        # Get project root (where script is located)
+        local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        local project_root=""
+        if [ -f "docker-compose.yml" ]; then
+            project_root="$(pwd)"
+        elif [ -f "${script_dir}/../docker-compose.yml" ]; then
+            project_root="$(cd "${script_dir}/.." && pwd)"
+        else
+            project_root="$(pwd)"
+        fi
+        # Handle relative paths like "../teaTraceCC" or "teaTraceCC"
+        if [[ "${chaincode_path}" == ../* ]]; then
+            # Remove "../" prefix and resolve from project root parent
+            local relative_part="${chaincode_path#../}"
+            local parent_dir="$(cd "${project_root}/.." && pwd)"
+            abs_chaincode_path="${parent_dir}/${relative_part}"
+            # If not found, try from project root (in case path is wrong)
+            if [ ! -d "${abs_chaincode_path}" ]; then
+                abs_chaincode_path="${project_root}/${relative_part}"
+            fi
+        else
+            abs_chaincode_path="${project_root}/${chaincode_path}"
+        fi
+    fi
+    
+    # Validate chaincode path (using resolved absolute path)
+    if [ ! -d "${abs_chaincode_path}" ]; then
         print_error "Chaincode path not found: ${chaincode_path}"
+        print_info "Resolved to: ${abs_chaincode_path}"
         print_info "Please provide absolute path or relative path from project root"
         return 1
     fi
     
     # Check if package.json exists (for Node.js chaincode)
-    if [ ! -f "${chaincode_path}/package.json" ]; then
-        print_warning "package.json not found in ${chaincode_path}"
+    if [ ! -f "${abs_chaincode_path}/package.json" ]; then
+        print_warning "package.json not found in ${abs_chaincode_path}"
         print_info "Assuming chaincode is already built or using different language"
     fi
     
@@ -1445,8 +1725,85 @@ deploy_fabric_chaincode() {
         return 1
     fi
     
+    # Step 0: Build chaincode (for Node.js/TypeScript chaincode)
+    print_info "Step 0/7: Building chaincode..."
+    
+    # abs_chaincode_path already resolved above
+    
+    # Check if it's Node.js chaincode (has package.json)
+    if [ -f "${abs_chaincode_path}/package.json" ]; then
+        print_info "Detected Node.js chaincode, building..."
+        
+        # Check if npm is available
+        if ! check_command npm; then
+            print_warning "npm not found. Skipping build step. Make sure chaincode is already built."
+        else
+            # Build chaincode
+            print_info "Installing dependencies..."
+            (cd "${abs_chaincode_path}" && npm install)
+            if [ $? -ne 0 ]; then
+                print_error "Failed to install chaincode dependencies"
+                return 1
+            fi
+            
+            print_info "Building TypeScript to JavaScript..."
+            (cd "${abs_chaincode_path}" && npm run build)
+            if [ $? -ne 0 ]; then
+                print_error "Failed to build chaincode"
+                return 1
+            fi
+            
+            # Check if dist/ directory exists
+            if [ ! -d "${abs_chaincode_path}/dist" ]; then
+                print_error "dist/ directory not found after build"
+                return 1
+            fi
+            
+            # Copy required files to dist/
+            print_info "Copying required files to dist/..."
+            if [ -f "${abs_chaincode_path}/msp-config.json" ]; then
+                cp "${abs_chaincode_path}/msp-config.json" "${abs_chaincode_path}/dist/"
+            else
+                print_warning "msp-config.json not found, skipping..."
+            fi
+            
+            if [ -f "${abs_chaincode_path}/package.json" ]; then
+                cp "${abs_chaincode_path}/package.json" "${abs_chaincode_path}/dist/"
+            else
+                print_error "package.json not found"
+                return 1
+            fi
+            
+            # Regenerate package-lock.json in dist/ with --omit=dev
+            print_info "Regenerating package-lock.json in dist/ (production only)..."
+            (cd "${abs_chaincode_path}/dist" && rm -f package-lock.json && npm install --omit=dev --package-lock-only)
+            if [ $? -ne 0 ]; then
+                print_warning "Failed to regenerate package-lock.json, continuing anyway..."
+            fi
+            
+            # Verify dist/ structure
+            if [ ! -f "${abs_chaincode_path}/dist/index.js" ]; then
+                print_error "index.js not found in dist/ after build"
+                return 1
+            fi
+            
+            if [ ! -f "${abs_chaincode_path}/dist/package.json" ]; then
+                print_error "package.json not found in dist/"
+                return 1
+            fi
+            
+            print_success "Chaincode built successfully"
+            # Update chaincode_path to point to dist/ directory
+            chaincode_path="${abs_chaincode_path}/dist"
+        fi
+    else
+        print_info "No package.json found, assuming chaincode is already built or using different language"
+    fi
+    
+    echo ""
+    
     # Step 1: Package chaincode
-    print_info "Step 1/6: Packaging chaincode..."
+    print_info "Step 1/7: Packaging chaincode..."
     local package_file="${chaincode_name}_${chaincode_version}.tar.gz"
     local chaincode_label="${chaincode_name}_${chaincode_version}"
     local temp_package="/tmp/${package_file}"
@@ -1455,10 +1812,24 @@ deploy_fabric_chaincode() {
     local first_peer="peer0.org1.ibn.vn"
     wait_for_fabric_container "${first_peer}"
     
-    # Copy chaincode to peer container
+    # Copy chaincode to peer container (use resolved path)
     print_info "Copying chaincode source to ${first_peer}..."
     local temp_chaincode_dir="/tmp/chaincode_${chaincode_name}"
-    docker cp "${chaincode_path}" "${first_peer}:${temp_chaincode_dir}" > /dev/null 2>&1
+    
+    # Determine source path: if chaincode_path was updated to dist/, use it; otherwise use abs_chaincode_path
+    local source_path
+    if [[ "${chaincode_path}" == */dist ]]; then
+        # Already pointing to dist/ (after build)
+        source_path="${chaincode_path}"
+    elif [[ "${chaincode_path}" == /* ]]; then
+        # Absolute path (original)
+        source_path="${chaincode_path}"
+    else
+        # Relative path, use abs_chaincode_path we calculated
+        source_path="${abs_chaincode_path}"
+    fi
+    
+    docker cp "${source_path}" "${first_peer}:${temp_chaincode_dir}" > /dev/null 2>&1
     
     if [ $? -ne 0 ]; then
         print_error "Failed to copy chaincode to peer container"
@@ -1495,10 +1866,31 @@ deploy_fabric_chaincode() {
     echo ""
     
     # Step 2: Install chaincode on all peers
-    print_info "Step 2/6: Installing chaincode on all peers..."
+    print_info "Step 2/7: Installing chaincode on all peers..."
     local peers=("peer0.org1.ibn.vn:7051" "peer1.org1.ibn.vn:8051" "peer2.org1.ibn.vn:9051")
     local install_success=0
     local package_ids=()
+    
+    # Copy Admin MSP to all peers (required for lifecycle queries)
+    print_info "Preparing Admin MSP for lifecycle operations..."
+    local admin_msp_path="core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp"
+    if [ ! -d "${admin_msp_path}" ]; then
+        print_error "Admin MSP not found: ${admin_msp_path}"
+        print_info "Please ensure crypto material is generated"
+        return 1
+    fi
+    
+    for peer_info in "${peers[@]}"; do
+        IFS=':' read -r peer_name peer_port <<< "${peer_info}"
+        if check_fabric_container "${peer_name}"; then
+            docker cp "${admin_msp_path}" "${peer_name}:/tmp/admin_msp" > /dev/null 2>&1
+            if [ $? -ne 0 ]; then
+                print_warning "Failed to copy Admin MSP to ${peer_name}, continuing anyway..."
+            fi
+        fi
+    done
+    print_success "Admin MSP prepared for all peers"
+    echo ""
     
     for peer_info in "${peers[@]}"; do
         IFS=':' read -r peer_name peer_port <<< "${peer_info}"
@@ -1517,7 +1909,7 @@ deploy_fabric_chaincode() {
             docker cp "${temp_package}" "${peer_name}:/root/${package_file}" > /dev/null 2>&1
         fi
         
-        # Install chaincode
+        # Install chaincode (can use peer MSP for install, but Admin MSP for query)
         local install_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
             -e CORE_PEER_TLS_ENABLED=true \
             -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
@@ -1531,11 +1923,33 @@ deploy_fabric_chaincode() {
             print_success "Installed on ${peer_name}"
             install_success=$((install_success + 1))
             
-            # Extract package ID
-            local pkg_id=$(query_installed_chaincode "${peer_name}" "${chaincode_label}")
+            # Try to extract package ID from install output first
+            local pkg_id=""
+            
+            # Multiple formats to try:
+            # 1. "Installed remotely: response:<status:200 payload:"\nEteaTraceCC_1.0:hash..."
+            pkg_id=$(echo "$install_output" | grep -oE "${chaincode_label}:[a-f0-9]{64,}" | head -1)
+            
+            # 2. "Installed chaincode with package ID 'teaTraceCC_1.0:hash...'"
+            if [ -z "$pkg_id" ]; then
+                pkg_id=$(echo "$install_output" | grep -oE "package ID ['\"]?${chaincode_label}:[a-f0-9]+" | sed "s/.*package ID ['\"]\?//" | head -1)
+            fi
+            
+            # 3. "Package ID: teaTraceCC_1.0:hash..."
+            if [ -z "$pkg_id" ]; then
+                pkg_id=$(echo "$install_output" | grep -i "Package ID" | grep -oE "${chaincode_label}:[a-f0-9]+" | head -1)
+            fi
+            
+            # If not found in install output, try querying with Admin MSP
+            if [ -z "$pkg_id" ]; then
+                pkg_id=$(query_installed_chaincode "${peer_name}" "${chaincode_label}")
+            fi
+            
             if [ -n "$pkg_id" ]; then
                 package_ids+=("${pkg_id}")
                 print_info "Package ID on ${peer_name}: ${pkg_id}"
+            else
+                print_warning "Could not extract package ID from ${peer_name}, but install was successful"
             fi
         else
             print_error "Failed to install on ${peer_name}: $install_output"
@@ -1571,13 +1985,13 @@ deploy_fabric_chaincode() {
     echo ""
     
     # Step 3: Approve chaincode definition
-    print_info "Step 3/6: Approving chaincode definition..."
+    print_info "Step 3/7: Approving chaincode definition..."
     
-    # Approve on first peer (representing organization)
+    # Approve on first peer (representing organization) - Use Admin MSP
     local approve_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
         -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
         -w /root \
         "peer0.org1.ibn.vn" \
@@ -1604,7 +2018,7 @@ deploy_fabric_chaincode() {
     sleep 2
     
     # Step 4: Check commit readiness
-    print_info "Step 4/6: Checking commit readiness..."
+    print_info "Step 4/7: Checking commit readiness..."
     if check_commit_readiness "peer0.org1.ibn.vn" "${channel_name}" "${chaincode_name}" "${chaincode_version}" "${sequence}"; then
         print_success "Chaincode is ready to commit"
     else
@@ -1615,12 +2029,13 @@ deploy_fabric_chaincode() {
     sleep 2
     
     # Step 5: Commit chaincode definition
-    print_info "Step 5/6: Committing chaincode definition to channel..."
+    print_info "Step 5/7: Committing chaincode definition to channel..."
     
+    # Use Admin MSP for commit (required for ACL)
     local commit_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
         -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
         -w /root \
         "peer0.org1.ibn.vn" \
@@ -1646,12 +2061,13 @@ deploy_fabric_chaincode() {
     sleep 2
     
     # Step 6: Verify deployment
-    print_info "Step 6/6: Verifying chaincode deployment..."
+    print_info "Step 6/7: Verifying chaincode deployment..."
     
+    # Use Admin MSP for querycommitted (required for ACL)
     local query_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
         -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
         -w /root \
         "peer0.org1.ibn.vn" \
@@ -1686,11 +2102,11 @@ bootstrap_network() {
     local channel_name="ibnchannel"
     local chaincode_name="teaTraceCC"
     local chaincode_version="1.0"
-    local chaincode_path="../teaTraceCC"
+    local chaincode_path="teaTraceCC"
     
-    # Resolve chaincode path
-    if [ ! -d "${chaincode_path}" ] && [ -d "teaTraceCC" ]; then
-        chaincode_path="teaTraceCC"
+    # Resolve chaincode path (fallback for different script locations)
+    if [ ! -d "${chaincode_path}" ] && [ -d "../teaTraceCC" ]; then
+        chaincode_path="../teaTraceCC"
     fi
     
     print_info "Full Network Bootstrap Configuration:"
@@ -1816,9 +2232,15 @@ cleanup_environment() {
     echo ""
     
     print_info "Đang dừng các containers..."
-    docker compose down
+    docker compose down -v  # -v to remove named volumes
     
-    print_info "Đang xóa các volumes cũ..."
+    print_info "Đang xóa các volumes cụ thể của Fabric..."
+    # Remove specific named volumes to ensure clean state
+    docker volume rm -f orderer.ibn.vn orderer1.ibn.vn orderer2.ibn.vn 2>/dev/null || true
+    docker volume rm -f peer0.org1.ibn.vn peer1.org1.ibn.vn peer2.org1.ibn.vn 2>/dev/null || true
+    docker volume rm -f couchdb0 couchdb1 couchdb2 2>/dev/null || true
+    
+    print_info "Đang xóa dangling volumes..."
     docker volume prune -f
     
     print_info "Đang xóa crypto material cũ..."
@@ -1826,7 +2248,13 @@ cleanup_environment() {
     rm -rf core/system-genesis-block
     rm -rf core/channel-artifacts
     
-    print_success "Đã dọn dẹp xong! Môi trường đã sẵn sàng cho cài đặt mới."
+    print_info "Đang xóa chaincode build artifacts..."
+    rm -rf teaTraceCC/dist
+    rm -rf teaTraceCC/node_modules
+    
+    print_success "✅ Đã dọn dẹp xong! Môi trường hoàn toàn sạch cho cài đặt mới."
+    echo ""
+    print_warning "⚠️  Lưu ý: Tất cả dữ liệu blockchain cũ đã bị xóa!"
     echo ""
 }
 
@@ -1882,12 +2310,215 @@ show_main_menu() {
     print_menu_option "4" "🔗" "Join Peers" "(Chỉ join peers)"
     print_menu_option "5" "📜" "Deploy Chaincode" "(Chỉ deploy chaincode)"
     print_menu_option "6" "🛑" "Stop Project" "(Dừng toàn bộ)"
-    print_menu_option "7" "👀" "View Logs" "(Xem logs)"
-    print_menu_option "8" "❌" "Exit" "(Thoát)"
+    print_menu_option "7" "👀" "View Error Logs" "(Xem logs lỗi)" "Chỉ hiển thị ERROR, WARN, PANIC"
+    print_menu_option "8" "👑" "Create Default Admin" "(Tạo admin để đăng nhập hệ thống)"
+    print_menu_option "9" "❌" "Exit" "(Thoát)"
     
     echo -e "${CYAN}${BOLD}╚${DIVIDER}╝${NC}"
     echo ""
-    echo -ne "${BOLD}➜ Nhập lựa chọn của bạn (1-8): ${NC}"
+    echo -ne "${BOLD}➜ Nhập lựa chọn của bạn (1-9): ${NC}"
+}
+
+# Create default admin user (DEV/DEMO only)
+# - Tạo admin@ibn.vn trong database (nếu chưa có hoặc cập nhật lại)
+# - Kiểm tra Admin MSP cho Org1 (blockchain identity)
+# - Thử login qua Backend API để xác nhận tài khoản dùng được
+create_default_admin() {
+    print_header "Tạo Admin Mặc Định (DEV/DEMO)"
+    echo ""
+
+    # 1. Kiểm tra containers cần thiết đang RUNNING
+    print_info "Đang kiểm tra containers..."
+    
+    local required_containers=("ibn-postgres" "ibn-backend")
+    local missing=()
+
+    for c in "${required_containers[@]}"; do
+        local status=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null)
+        if [ "$status" != "running" ]; then
+            missing+=("$c (status: ${status:-not found})")
+        fi
+    done
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        print_error "Các containers sau chưa chạy hoặc không tồn tại:"
+        for c in "${missing[@]}"; do
+            echo "  - $c"
+        done
+        echo ""
+        print_info "Hãy chọn option 1 (Fresh Setup) hoặc 2 (Normal Start) để khởi động services trước."
+        return 1
+    fi
+    
+    print_success "✓ Containers đang chạy"
+    
+    # 1.5. Đợi backend sẵn sàng
+    print_info "Đang đợi backend sẵn sàng (max 30s)..."
+    local wait_time=0
+    while [ $wait_time -lt 30 ]; do
+        if curl -s http://localhost:9900/health > /dev/null 2>&1; then
+            print_success "✓ Backend sẵn sàng"
+            break
+        fi
+        echo -n "."
+        sleep 2
+        wait_time=$((wait_time + 2))
+    done
+    echo ""
+    
+    if [ $wait_time -ge 30 ]; then
+        print_warning "Backend chưa sẵn sàng sau 30s, nhưng sẽ tiếp tục thử tạo admin..."
+    fi
+
+    # 2. Kiểm tra Admin MSP trên filesystem (blockchain identity)
+    local admin_msp_path="core/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp"
+    if [ -d "$admin_msp_path" ] && [ -n "$(ls -A "$admin_msp_path" 2>/dev/null)" ]; then
+        print_success "Admin MSP (Org1) đã tồn tại: $admin_msp_path"
+    else
+        print_warning "Không tìm thấy Admin MSP tại: $admin_msp_path"
+        print_info "Admin MSP sẽ được tạo lại nếu bạn chạy Fresh Setup (option 1)."
+    fi
+
+    echo ""
+    
+    # 3. Kiểm tra và tạo schemas + tables nếu chưa có
+    print_info "Đang kiểm tra database schema..."
+    
+    # Kiểm tra schema auth có tồn tại không
+    local schema_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth');" | tr -d ' ')
+    
+    if [ "$schema_exists" != "t" ]; then
+        print_warning "Schema 'auth' chưa tồn tại. Đang chạy migrations..."
+        
+        # Apply migrations thủ công (backend không có auto-migration)
+        local migration_count=0
+        local failed_migrations=()
+        
+        for migration in backend/migrations/*.up.sql; do
+            if [ -f "$migration" ]; then
+                local migration_name=$(basename "$migration")
+                print_info "  ➜ Applying $migration_name..."
+                
+                if docker exec -i ibn-postgres psql -U gateway -d ibn_gateway < "$migration" > /tmp/migration_${migration_count}.log 2>&1; then
+                    print_success "    ✓ $migration_name"
+                    ((migration_count++))
+                else
+                    print_error "    ✗ $migration_name failed"
+                    failed_migrations+=("$migration_name")
+                fi
+            fi
+        done
+        
+        echo ""
+        if [ ${#failed_migrations[@]} -eq 0 ]; then
+            print_success "✓ Đã apply $migration_count migrations thành công"
+        else
+            print_error "Có ${#failed_migrations[@]} migrations thất bại:"
+            for failed in "${failed_migrations[@]}"; do
+                echo "  - $failed"
+            done
+            print_info "Xem chi tiết lỗi tại /tmp/migration_*.log"
+            return 1
+        fi
+    else
+        print_success "✓ Schema 'auth' đã tồn tại"
+    fi
+    
+    # Kiểm tra table users
+    local table_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users');" | tr -d ' ')
+    
+    if [ "$table_exists" != "t" ]; then
+        print_error "Table 'auth.users' không tồn tại sau khi chạy migrations!"
+        print_info "Vui lòng kiểm tra logs migration tại /tmp/migration.log"
+        return 1
+    fi
+    
+    print_success "✓ Table 'auth.users' tồn tại"
+    
+    # 4. Tạo admin trong PostgreSQL
+    print_info "Đang tạo/cập nhật admin user..."
+    
+    local admin_email="admin@ibn.vn"
+    local admin_username="admin"
+    local admin_password_plain="admin123"
+    local password_hash='$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+
+    # Insert vào schema auth.users (không phải public.users)
+    docker exec -i ibn-postgres psql -U gateway -d ibn_gateway <<EOF
+INSERT INTO auth.users (email, password_hash, full_name, role, msp_id, is_active, email_verified)
+VALUES ('$admin_email', '$password_hash', 'Admin User', 'admin', 'Org1MSP', TRUE, TRUE)
+ON CONFLICT (email) DO UPDATE SET
+    password_hash = EXCLUDED.password_hash,
+    role = EXCLUDED.role,
+    msp_id = EXCLUDED.msp_id,
+    is_active = EXCLUDED.is_active,
+    email_verified = EXCLUDED.email_verified,
+    updated_at = CURRENT_TIMESTAMP;
+EOF
+
+    if [ $? -ne 0 ]; then
+        print_error "Không thể tạo/cập nhật admin trong database."
+        return 1
+    fi
+
+    print_success "✓ Đã tạo/cập nhật admin trong database"
+
+    # 5. Thử login qua Backend API để xác nhận
+    echo ""
+    print_info "Đang kiểm tra đăng nhập qua Backend API..."
+
+    if ! check_command curl; then
+        print_warning "curl không tồn tại, bỏ qua bước kiểm tra đăng nhập."
+    else
+        local login_response
+        local login_status
+        
+        login_response=$(curl -s -w "\n%{http_code}" \
+            "http://localhost:9900/api/v1/auth/login" \
+            -H "Content-Type: application/json" \
+            -d "{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}" 2>/dev/null || echo -e "\n000")
+        
+        login_status=$(echo "$login_response" | tail -1)
+        local response_body=$(echo "$login_response" | head -n -1)
+
+        if [ "$login_status" = "200" ]; then
+            print_success "✓ Đăng nhập thành công!"
+            
+            # Extract access token để verify
+            local access_token=$(echo "$response_body" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+            if [ -n "$access_token" ]; then
+                print_success "✓ Nhận được access token (${#access_token} chars)"
+            fi
+        else
+            print_error "✗ Đăng nhập thất bại (HTTP $login_status)"
+            echo ""
+            print_info "Response body:"
+            echo "$response_body" | head -5
+            echo ""
+            print_info "Có thể backend chưa hoàn toàn sẵn sàng. Vui lòng thử lại sau hoặc kiểm tra logs:"
+            echo "  docker logs ibn-backend"
+        fi
+    fi
+
+    echo ""
+    print_header "Thông Tin Tài Khoản Admin (DEV/DEMO)"
+    echo ""
+    echo "  📧 Email:    ${CYAN}${BOLD}$admin_email${NC}"
+    echo "  👤 Username: ${CYAN}${BOLD}$admin_username${NC}"
+    echo "  🔑 Password: ${CYAN}${BOLD}$admin_password_plain${NC}"
+    echo ""
+    echo "  🌐 API Endpoint: ${CYAN}http://localhost:9900/api/v1/auth/login${NC}"
+    echo ""
+    print_warning "⚠ Tài khoản này CHỈ dùng cho môi trường DEV/DEMO. Không dùng cho production."
+    echo ""
+    
+    # Thêm hướng dẫn test
+    print_info "Test đăng nhập bằng curl:"
+    echo ""
+    echo "curl -X POST http://localhost:9900/api/v1/auth/login \\"
+    echo "  -H 'Content-Type: application/json' \\"
+    echo "  -d '{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}'"
+    echo ""
 }
 
 perform_fresh_setup() {
@@ -1928,6 +2559,14 @@ perform_normal_start() {
         print_info "Đang chờ services khởi động (30 giây)..."
         sleep 30
         echo ""
+        
+        # Wait for Fabric network to be ready (TLS handshake, Raft cluster, gossip)
+        if [ "$mode" == "fresh" ]; then
+            print_header "Verifying Fabric Network Health"
+            echo ""
+            wait_for_fabric_network
+            echo ""
+        fi
         
         # Check services status
         print_header "Trạng Thái Services"
@@ -2201,8 +2840,10 @@ main() {
     # Check core directory (Fabric certificates)
     if [ ! -d "core/organizations" ] || [ -z "$(ls -A core/organizations)" ]; then
         print_warning "Thư mục core/organizations không tồn tại hoặc trống"
-        print_info "  → Đang tự động tạo Fabric certificates..."
-        
+        print_info "  → Lần đầu chạy dự án, sẽ tự động tạo Fabric certificates."
+        print_info "  → Nếu bạn đã từng chạy network trước đó, nên chọn Option 1 (Fresh Setup)."
+        echo ""
+
         if generate_crypto_material "core"; then
             project_ready=true # Reset to true if generation succeeded, will be checked again
         else
@@ -2228,28 +2869,25 @@ main() {
         done
         
         if [ "$cert_missing" = true ]; then
-            print_warning "Phát hiện thiếu sót trong cấu trúc certificates."
-            print_info "  → Đang tạo lại toàn bộ certificates..."
-            if generate_crypto_material "core"; then
-                project_ready=true
-            else
-                project_ready=false
-                missing_items+=("Fabric certificates (Regeneration failed)")
-            fi
+            print_error "Phát hiện thiếu sót trong cấu trúc certificates hiện tại."
+            print_warning "⚠ Vì lý do an toàn TLS, script sẽ KHÔNG tự động regenerate certificates ở chế độ này."
+            print_info "  → Vui lòng chọn Option 1 (Fresh Setup) trong menu chính để:"
+            print_info "     - Dừng toàn bộ containers"
+            print_info "     - Xoá volumes cũ (ledger, state, Raft metadata)"
+            print_info "     - Tạo lại crypto + genesis block đồng bộ"
+            echo ""
+            project_ready=false
+            missing_items+=("Fabric certificates (inconsistent structure - run Fresh Setup)")}
         fi
     fi
     
     # Check genesis block (required for orderers)
     if [ ! -f "core/system-genesis-block/genesis.block" ]; then
         print_warning "File core/system-genesis-block/genesis.block không tồn tại"
-        print_info "  → Đang tự động tạo genesis block..."
-        
-        if generate_genesis_block "core"; then
-            project_ready=true
-        else
-            project_ready=false
-            missing_items+=("core/system-genesis-block/genesis.block (Generation failed)")
-        fi
+        print_warning "⚠ Script sẽ không tự tạo genesis block ở bước kiểm tra này để tránh lệch TLS."
+        print_info "  → Vui lòng chọn Option 1 (Fresh Setup) để generate genesis block cùng crypto material."
+        project_ready=false
+        missing_items+=("core/system-genesis-block/genesis.block (Missing - run Fresh Setup)")
     else
         print_success "Genesis block: OK"
     fi
@@ -2330,7 +2968,7 @@ main() {
                 ;;
             5)
                 print_info "Đang deploy chaincode..."
-                deploy_fabric_chaincode "ibnchannel" "teaTraceCC" "1.0" "../teaTraceCC"
+                deploy_fabric_chaincode "ibnchannel" "teaTraceCC" "1.0" "teaTraceCC"
                 ;;
             6)
                 print_info "Đang dừng toàn bộ dự án..."
@@ -2338,10 +2976,31 @@ main() {
                 print_success "Đã dừng dự án."
                 ;;
             7)
-                print_info "Đang hiển thị logs (Ctrl+C để thoát)..."
-                docker compose logs -f
+                print_info "Đang hiển thị logs lỗi (Ctrl+C để thoát)..."
+                print_info "Chỉ hiển thị logs có level ERROR, WARN, PANIC, hoặc FAILED"
+                echo ""
+                print_info "Đang lọc logs từ tất cả services..."
+                echo ""
+                
+                # Filter logs for errors, warnings, panics, and failures
+                # Use --tail=100 to show recent logs first, then follow
+                docker compose logs --tail=100 -f 2>&1 | grep --line-buffered -iE "(error|warn|panic|fatal|failed|exception|erro|❌|⚠)" --color=always || {
+                    echo ""
+                    print_info "Không tìm thấy logs lỗi trong 100 dòng gần nhất."
+                    print_info "Tất cả services có vẻ đang hoạt động bình thường."
+                    echo ""
+                    print_info "Nếu muốn xem full logs, sử dụng lệnh:"
+                    echo "  ${GREEN}docker compose logs -f${NC}"
+                    echo ""
+                    print_info "Hoặc xem logs của service cụ thể:"
+                    echo "  ${GREEN}docker compose logs -f <service_name>${NC}"
+                }
                 ;;
             8)
+                print_info "Đang tạo admin mặc định (DEV/DEMO)..."
+                create_default_admin
+                ;;
+            9)
                 print_info "Tạm biệt!"
                 exit 0
                 ;;
