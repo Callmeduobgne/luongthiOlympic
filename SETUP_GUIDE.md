@@ -15,6 +15,33 @@ docker --version
 docker compose version
 ```
 
+> 🔐 **Quyền hạn (rất quan trọng)**
+>
+> - Tài liệu này được thiết kế để **có thể dùng như “backup script” khi bạn KHÔNG có quyền sudo trong WSL**.
+> - Điều kiện bắt buộc khi bạn không có sudo:
+>   - Docker + Docker Compose đã được **admin cài sẵn** và chạy nền.
+>   - User của bạn đã được admin thêm vào `docker` group (để chạy được `docker ...` không cần sudo).
+> - Mọi lệnh trong guide **không dùng `sudo`**, trừ một vài dòng trong phần *Troubleshooting* được đánh dấu rõ là **(Admin only)** – nếu bạn không có quyền, hãy nhờ admin chạy giúp những lệnh đó.
+
+### ✅ Checklist nhanh cho WSL **không có quyền admin**
+
+- **Bước 1**: Mở WSL, chạy:
+  ```bash
+  docker ps
+  ```
+  - Nếu chạy được và hiện danh sách containers (hoặc rỗng) → **OK, tiếp tục các bước phía dưới**.
+  - Nếu báo lỗi kiểu `permission denied` hoặc `Cannot connect to the Docker daemon`:
+    - Bạn **không tự fix được nếu không có sudo**.
+    - Gửi cho admin (hoặc người cài máy) đoạn sau và nhờ họ chạy trên Linux host (Admin only):
+      ```bash
+      # Thêm user vào docker group (Admin only)
+      sudo usermod -aG docker <username>
+      sudo systemctl restart docker
+      ```
+      Sau đó bạn **logout / login lại WSL** rồi thử lại `docker ps`.
+
+- **Bước 2**: Sau khi `docker ps` chạy OK, bạn có thể **làm toàn bộ các bước còn lại trong file này mà không cần sudo**.
+
 ---
 
 ## 🧹 2. Dọn Dẹp Môi Trường Cũ (Cleanup)
@@ -615,9 +642,9 @@ docker system prune -f
 
 # Kiểm tra Docker daemon
 docker ps
-# Nếu lỗi, khởi động lại Docker: 
-# Linux: sudo systemctl restart docker
-# Windows: Restart Docker Desktop
+# Nếu lỗi, khởi động lại Docker (Admin only): 
+#   - Linux: sudo systemctl restart docker
+#   - Windows: Restart Docker Desktop (Docker Desktop UI)
 ```
 
 #### 3. **Kiểm tra package file và cấu trúc**
@@ -673,9 +700,9 @@ docker exec peer0.org1.ibn.vn peer version
 ls -la /var/run/docker.sock
 # Phải có quyền: srw-rw----
 
-# Nếu không có quyền, thêm user vào docker group
-sudo usermod -aG docker $USER
-# Logout và login lại để áp dụng thay đổi
+# Nếu không có quyền, thêm user vào docker group (Admin only):
+#   sudo usermod -aG docker $USER
+# Sau đó logout/login lại để áp dụng thay đổi
 ```
 
 #### 7. **Kiểm tra package-lock.json đã sync**
