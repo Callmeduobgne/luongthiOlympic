@@ -220,18 +220,200 @@ ibnchannel
 
 ---
 
-## 📜 9. Deploy Chaincode (Tùy chọn)
+## 📜 9. Deploy Chaincode teaTraceCC
 
-Nếu muốn deploy chaincode (ví dụ `basic`):
+Hướng dẫn deploy chaincode **teaTraceCC** (Node.js/TypeScript) lên network IBN.
+
+### 9.1. Build Chaincode
+
+Trước tiên, cần build chaincode từ source code:
 
 ```bash
-# Package chaincode
-docker exec peer0.org1.ibn.vn peer lifecycle chaincode package basic.tar.gz --path /opt/gopath/src/github.com/chaincode/basic --lang golang --label basic_1.0
+# Di chuyển vào thư mục chaincode
+cd teaTraceCC
 
-# Install trên Peer0
-docker exec peer0.org1.ibn.vn peer lifecycle chaincode install basic.tar.gz
+# Cài đặt dependencies
+npm install
 
-# (Lặp lại install cho peer1, peer2 nếu cần)
+# Build TypeScript sang JavaScript
+npm run build
 
-# Approve & Commit (Cần thêm các bước approve và commit tùy theo policy)
+# Copy file cấu hình MSP vào thư mục dist
+cp msp-config.json dist/
 ```
+
+### 9.2. Package Chaincode
+
+Tạo package file cho chaincode:
+
+```bash
+# Quay về thư mục gốc
+cd ..
+
+# Copy thư mục dist vào container peer0 để package
+docker cp teaTraceCC/dist peer0.org1.ibn.vn:/opt/chaincode/teaTraceCC
+
+# Package chaincode
+docker exec peer0.org1.ibn.vn peer lifecycle chaincode package teaTraceCC.tar.gz \
+  --path /opt/chaincode/teaTraceCC \
+  --lang node \
+  --label teaTraceCC_1.1.0
+
+# Copy package file ra ngoài để dùng cho các peer khác
+docker cp peer0.org1.ibn.vn:/opt/chaincode/teaTraceCC.tar.gz ./teaTraceCC.tar.gz
+```
+
+### 9.3. Install Chaincode trên các Peers
+
+Cài đặt chaincode trên tất cả các peers:
+
+```bash
+# Install trên Peer0
+docker exec peer0.org1.ibn.vn peer lifecycle chaincode install teaTraceCC.tar.gz
+
+# Install trên Peer1
+docker cp teaTraceCC.tar.gz peer1.org1.ibn.vn:/opt/chaincode/
+docker exec peer1.org1.ibn.vn peer lifecycle chaincode install /opt/chaincode/teaTraceCC.tar.gz
+
+# Install trên Peer2
+docker cp teaTraceCC.tar.gz peer2.org1.ibn.vn:/opt/chaincode/
+docker exec peer2.org1.ibn.vn peer lifecycle chaincode install /opt/chaincode/teaTraceCC.tar.gz
+```
+
+**Lưu ý:** Sau mỗi lệnh install, lưu lại **PACKAGE_ID** từ output. Ví dụ:
+```
+2024-12-04 10:00:00.000 UTC 0001 INFO [cli.lifecycle.chaincode] submitInstallProposal -> Installed remotely: response:<status:200 payload:"\nEteaTraceCC_1.1.0:abc123def456..." >
+```
+
+### 9.4. Approve Chaincode Definition
+
+Approve chaincode definition cho Org1:
+
+```bash
+# Thay <PACKAGE_ID> bằng PACKAGE_ID thực tế từ bước trên
+PACKAGE_ID="teaTraceCC_1.1.0:abc123def456..."  # Thay bằng PACKAGE_ID thực tế
+
+# Approve trên Peer0 (với Admin MSP)
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode approveformyorg \
+  -o orderer.ibn.vn:7050 \
+  --ordererTLSHostnameOverride orderer.ibn.vn \
+  --channelID ibnchannel \
+  --name teaTraceCC \
+  --version 1.1.0 \
+  --package-id ${PACKAGE_ID} \
+  --sequence 1 \
+  --tls \
+  --cafile /etc/hyperledger/fabric/orderer/tls/ca.crt
+```
+
+### 9.5. Commit Chaincode Definition
+
+Commit chaincode definition lên channel:
+
+```bash
+# Commit chaincode (cần ít nhất 1 peer từ mỗi org)
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode commit \
+  -o orderer.ibn.vn:7050 \
+  --ordererTLSHostnameOverride orderer.ibn.vn \
+  --channelID ibnchannel \
+  --name teaTraceCC \
+  --version 1.1.0 \
+  --sequence 1 \
+  --tls \
+  --cafile /etc/hyperledger/fabric/orderer/tls/ca.crt \
+  --peerAddresses peer0.org1.ibn.vn:7051 \
+  --tlsRootCertFiles /etc/hyperledger/fabric/tls/ca.crt \
+  --peerAddresses peer1.org1.ibn.vn:8051 \
+  --tlsRootCertFiles /etc/hyperledger/fabric/tls/ca.crt \
+  --peerAddresses peer2.org1.ibn.vn:9051 \
+  --tlsRootCertFiles /etc/hyperledger/fabric/tls/ca.crt
+```
+
+### 9.6. Kiểm Tra Chaincode đã Deploy
+
+Kiểm tra chaincode đã được commit thành công:
+
+```bash
+# Query committed chaincode
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode querycommitted --channelID ibnchannel
+```
+
+Nếu thấy output có `teaTraceCC` với version `1.1.0`, chaincode đã được deploy thành công! 🎉
+
+### 9.7. Ví dụ Sử dụng Chaincode
+
+#### Tạo lô trà mới
+```bash
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer chaincode invoke \
+  -o orderer.ibn.vn:7050 \
+  --ordererTLSHostnameOverride orderer.ibn.vn \
+  -C ibnchannel \
+  -n teaTraceCC \
+  --tls \
+  --cafile /etc/hyperledger/fabric/orderer/tls/ca.crt \
+  --peerAddresses peer0.org1.ibn.vn:7051 \
+  --tlsRootCertFiles /etc/hyperledger/fabric/tls/ca.crt \
+  -c '{"Args":["createBatch","BATCH001","Moc Chau, Son La","2024-12-04","Organic processing","VN-ORG-2024"]}'
+```
+
+#### Query thông tin lô trà
+```bash
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer chaincode query \
+  -C ibnchannel \
+  -n teaTraceCC \
+  -c '{"Args":["getBatchInfo","BATCH001"]}'
+```
+
+#### Query tất cả batches
+```bash
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp/users/Admin@org1.ibn.vn/msp" \
+  -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+  peer0.org1.ibn.vn \
+  peer chaincode query \
+  -C ibnchannel \
+  -n teaTraceCC \
+  -c '{"Args":["getAllBatches","50","0"]}'
+```
+
+---
+
+**Lưu ý:**
+- Chaincode teaTraceCC sử dụng **Node.js**, không phải Golang
+- Cần build TypeScript trước khi package
+- File `msp-config.json` phải được copy vào thư mục `dist/` trước khi package
+- PACKAGE_ID sẽ khác nhau mỗi lần install, cần lưu lại để dùng cho approve
+- Channel name: `ibnchannel`
+- MSP ID: `Org1MSP`
