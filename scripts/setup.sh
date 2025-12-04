@@ -600,6 +600,67 @@ print_windows_cmd_guide() {
     echo ""
 }
 
+# Create NodeOUs config.yaml for MSPs
+create_nodeou_configs() {
+    local orgs_dir="$1"
+    
+    print_info "Đang tạo NodeOUs config..."
+    
+    # Tạo config cho Peer Organization
+    local peer_msp="$orgs_dir/peerOrganizations/org1.ibn.vn/msp"
+    if [ -d "$peer_msp" ]; then
+        cat > "$peer_msp/config.yaml" << EOF
+NodeOUs:
+  Enable: true
+  ClientOUIdentifier:
+    Certificate: cacerts/ca.org1.ibn.vn-cert.pem
+    OrganizationalUnitIdentifier: client
+  PeerOUIdentifier:
+    Certificate: cacerts/ca.org1.ibn.vn-cert.pem
+    OrganizationalUnitIdentifier: peer
+  AdminOUIdentifier:
+    Certificate: cacerts/ca.org1.ibn.vn-cert.pem
+    OrganizationalUnitIdentifier: admin
+  OrdererOUIdentifier:
+    Certificate: cacerts/ca.org1.ibn.vn-cert.pem
+    OrganizationalUnitIdentifier: orderer
+EOF
+        print_success "Đã tạo config cho Org1MSP"
+    fi
+    
+    # Tạo config cho Orderer Organization
+    local orderer_msp="$orgs_dir/ordererOrganizations/ibn.vn/msp"
+    if [ -d "$orderer_msp" ]; then
+        # Note: Orderer CA cert name might vary, checking pattern
+        local ca_cert="cacerts/ca.ibn.vn-cert.pem"
+        # If specific file doesn't exist, try to find it
+        if [ ! -f "$orderer_msp/$ca_cert" ]; then
+             local found_cert=$(ls "$orderer_msp/cacerts/" | head -1)
+             if [ -n "$found_cert" ]; then
+                 ca_cert="cacerts/$found_cert"
+             fi
+        fi
+
+        cat > "$orderer_msp/config.yaml" << EOF
+NodeOUs:
+  Enable: true
+  ClientOUIdentifier:
+    Certificate: $ca_cert
+    OrganizationalUnitIdentifier: client
+  PeerOUIdentifier:
+    Certificate: $ca_cert
+    OrganizationalUnitIdentifier: peer
+  AdminOUIdentifier:
+    Certificate: $ca_cert
+    OrganizationalUnitIdentifier: admin
+  OrdererOUIdentifier:
+    Certificate: $ca_cert
+    OrganizationalUnitIdentifier: orderer
+EOF
+        print_success "Đã tạo config cho OrdererMSP"
+    fi
+}
+
 # Generate crypto material using cryptogen
 generate_crypto_material() {
     print_info "Đang tạo crypto material..."
@@ -623,6 +684,7 @@ generate_crypto_material() {
         print_info "Sử dụng cryptogen local..."
         if cryptogen generate --config="$crypto_config" --output="$output_dir"; then
             print_success "Đã tạo crypto material thành công (local)"
+            create_nodeou_configs "$output_dir"
             return 0
         fi
     fi
@@ -636,6 +698,7 @@ generate_crypto_material() {
         if docker run --rm -v "$abs_core_dir":/core -w /core hyperledger/fabric-tools:2.5 \
             cryptogen generate --config=crypto-config.yaml --output=organizations; then
             print_success "Đã tạo crypto material thành công (Docker)"
+            create_nodeou_configs "$output_dir"
             return 0
         fi
     fi
@@ -1858,7 +1921,7 @@ perform_normal_start() {
     # Run docker compose up -d (build and start)
     print_info "Đang build và khởi động các services..."
     echo ""
-    if docker compose up -d --build 2>&1; then
+    if docker compose up -d --build 2>&1 | grep -E "(Built|Created|Started|Healthy|Error|Pulling|Downloaded)" | tail -20; then
         echo ""
         print_success "Dự án đã được build và khởi động thành công!"
         echo ""

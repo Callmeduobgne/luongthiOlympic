@@ -1,6 +1,7 @@
 OrdererOrgs:
   - Name: Orderer
     Domain: ibn.vn
+    EnableNodeOUs: true
     Specs:
       - Hostname: orderer
       - Hostname: orderer1
