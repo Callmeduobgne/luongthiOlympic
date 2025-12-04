@@ -31,12 +31,13 @@
 import axios from 'axios'
 import { API_ENDPOINTS } from '../config/api.config'
 
+// API Gateway refresh response format (wrapped)
 interface RefreshTokenResponse {
   success: boolean
   data: {
-    access_token: string
-    refresh_token: string
-    expires_in: number
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
   }
 }
 
@@ -101,31 +102,36 @@ class TokenRefreshManager {
   }
 
   private async performRefresh(): Promise<string> {
-    const refreshToken = localStorage.getItem('refresh_token')
-    
+    // Use unified camelCase key
+    const refreshToken = localStorage.getItem('refreshToken')
+
     if (!refreshToken) {
       throw new Error('No refresh token available')
     }
 
     try {
+      // Call API Gateway refresh endpoint
       const response = await axios.post<RefreshTokenResponse>(
         API_ENDPOINTS.AUTH.REFRESH,
-        { refresh_token: refreshToken }
+        { refreshToken }
       )
 
-      const { access_token, refresh_token: newRefreshToken } = response.data.data
+      const { accessToken, refreshToken: newRefreshToken } = response.data.data
 
-      // Store new tokens
-      localStorage.setItem('access_token', access_token)
+      // Store new tokens with unified keys
+      if (accessToken) {
+        localStorage.setItem('accessToken', accessToken)
+      }
       if (newRefreshToken) {
-        localStorage.setItem('refresh_token', newRefreshToken)
+        localStorage.setItem('refreshToken', newRefreshToken)
       }
 
-      return access_token
+      return accessToken
     } catch (error) {
       // Refresh failed, clear tokens
-      localStorage.removeItem('access_token')
-      localStorage.removeItem('refresh_token')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('refreshToken')
+      localStorage.removeItem('tokenExpiresAt')
       throw error
     }
   }

@@ -1,6 +1,6 @@
 # IBN Network - ICTU Blockchain Network
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![CI/CD](https://github.com/Callmeduobgne/luongthiOlympic/actions/workflows/ci.yml/badge.svg)](https://github.com/Callmeduobgne/luongthiOlympic/actions)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Callmeduobgne/luongthiOlympic)](https://goreportcard.com/report/github.com/Callmeduobgne/luongthiOlympic)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
@@ -118,21 +118,45 @@ Hệ thống IBN Network được xây dựng theo kiến trúc **multi-layer** 
 
 ### Yêu Cầu
 
--   Docker 20.10+
--   Docker Compose 1.29+
+-   Docker 20.10+ & Docker Compose 1.29+
 -   8GB RAM minimum
 -   20GB disk space
+-   Bash shell (Ubuntu/WSL/macOS) để chạy `scripts/setup.sh`
 
-### Khởi Động Toàn Bộ Hệ Thống
+### Khởi Động Toàn Bộ Hệ Thống (Khuyến nghị)
 
 ```bash
-# Clone repository
-cd /home/ubuntu/luongbeo
+# Clone repository (ví dụ trên Ubuntu/WSL)
+git clone https://github.com/Callmeduobgne/luongthiOlympic.git
+cd luongthiOlympic
 
-# Khởi động tất cả services (Production)
+# Cấp quyền & chạy script setup
+chmod +x scripts/setup.sh
+./scripts/setup.sh
+
+# 1. Chọn chế độ sử dụng:
+#    - [0] Production (Docker-only)
+#    - [1] Development (Go + Node.js + Docker)
+#
+# 2. Ở MENU CHÍNH:
+#    - Lần đầu chạy:      chọn option 1 - "Fresh Setup"
+#      → Xoá sạch môi trường cũ, tạo crypto + genesis block, start toàn bộ containers
+#    - Các lần sau:       chọn option 2 - "Normal Start"
+#      → Giữ nguyên dữ liệu, chỉ khởi động lại các services
+#
+# 3. (Tuỳ chọn) Tạo admin mặc định để đăng nhập:
+#    - Chọn option 8 - "Create Default Admin"
+```
+
+### Khởi Động Thủ Công (Advanced)
+
+Nếu không dùng `scripts/setup.sh`, bạn có thể tự khởi động bằng Docker:
+
+```bash
+# Khởi động tất cả services (production)
 docker compose up -d
 
-# Khởi động với monitoring stack
+# Khởi động kèm monitoring stack
 docker compose -f docker-compose.yml -f monitoring/docker-compose-monitoring.yml up -d
 ```
 

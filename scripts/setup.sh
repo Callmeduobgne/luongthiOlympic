@@ -2327,16 +2327,17 @@ create_default_admin() {
     print_header "Tạo Admin Mặc Định (DEV/DEMO)"
     echo ""
 
-    # 1. Kiểm tra containers cần thiết đang RUNNING
-    print_info "Đang kiểm tra containers..."
+    # 1. Kiểm tra Postgres bắt buộc phải RUNNING
+    print_info "Đang kiểm tra containers bắt buộc..."
     
-    local required_containers=("ibn-postgres" "ibn-backend")
+    local required_containers=("ibn-postgres")
     local missing=()
 
     for c in "${required_containers[@]}"; do
-        local status=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null)
+        local status
+        status=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null || echo "not-found")
         if [ "$status" != "running" ]; then
-            missing+=("$c (status: ${status:-not found})")
+            missing+=("$c (status: $status)")
         fi
     done
 
@@ -2350,24 +2351,31 @@ create_default_admin() {
         return 1
     fi
     
-    print_success "✓ Containers đang chạy"
+    print_success "✓ Postgres đang chạy"
     
-    # 1.5. Đợi backend sẵn sàng
-    print_info "Đang đợi backend sẵn sàng (max 30s)..."
-    local wait_time=0
-    while [ $wait_time -lt 30 ]; do
-        if curl -s http://localhost:9900/health > /dev/null 2>&1; then
-            print_success "✓ Backend sẵn sàng"
-            break
+    # 1.5. Backend là TUỲ CHỌN (chỉ để test login)
+    local backend_status
+    backend_status=$(docker inspect -f '{{.State.Status}}' "ibn-backend" 2>/dev/null || echo "not-found")
+    if [ "$backend_status" != "running" ]; then
+        print_warning "Backend (ibn-backend) chưa chạy (status: $backend_status)."
+        print_info "Vẫn tiếp tục tạo admin trong database, nhưng KHÔNG test đăng nhập qua API được."
+    else
+        print_info "Đang đợi backend sẵn sàng (max 30s)..."
+        local wait_time=0
+        while [ $wait_time -lt 30 ]; do
+            if curl -s http://localhost:9900/health > /dev/null 2>&1; then
+                print_success "✓ Backend sẵn sàng"
+                break
+            fi
+            echo -n "."
+            sleep 2
+            wait_time=$((wait_time + 2))
+        done
+        echo ""
+        
+        if [ $wait_time -ge 30 ]; then
+            print_warning "Backend chưa sẵn sàng sau 30s, nhưng sẽ tiếp tục thử tạo admin..."
         fi
-        echo -n "."
-        sleep 2
-        wait_time=$((wait_time + 2))
-    done
-    echo ""
-    
-    if [ $wait_time -ge 30 ]; then
-        print_warning "Backend chưa sẵn sàng sau 30s, nhưng sẽ tiếp tục thử tạo admin..."
     fi
 
     # 2. Kiểm tra Admin MSP trên filesystem (blockchain identity)
@@ -2384,22 +2392,41 @@ create_default_admin() {
     # 3. Kiểm tra và tạo schemas + tables nếu chưa có
     print_info "Đang kiểm tra database schema..."
     
-    # Kiểm tra schema auth có tồn tại không
-    local schema_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth');" | tr -d ' ')
+    # Đảm bảo extension pgcrypto tồn tại (cần cho gen_random_uuid)
+    print_info "Đảm bảo extension 'pgcrypto' tồn tại trong database..."
+    if ! docker exec ibn-postgres psql -U postgres -d ibn_gateway -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;" >/dev/null 2>&1; then
+        print_warning "Không thể tạo extension pgcrypto (có thể đã tồn tại hoặc thiếu quyền)."
+    else
+        print_success "✓ Extension 'pgcrypto' đã được đảm bảo tồn tại."
+    fi
     
-    if [ "$schema_exists" != "t" ]; then
-        print_warning "Schema 'auth' chưa tồn tại. Đang chạy migrations..."
-        
+    # Luôn kiểm tra schema + table, nếu thiếu thì apply migrations
+    # 3.1. Kiểm tra schema auth
+    local schema_exists
+    schema_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.schemata WHERE schema_name = 'auth');" | tr -d ' ')
+
+    # 3.2. Kiểm tra table auth.users
+    local table_exists
+    table_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users');" | tr -d ' ')
+
+    if [ "$schema_exists" != "t" ] || [ "$table_exists" != "t" ]; then
+        if [ "$schema_exists" != "t" ]; then
+            print_warning "Schema 'auth' chưa tồn tại. Đang chạy toàn bộ migrations..."
+        else
+            print_warning "Schema 'auth' đã tồn tại nhưng table 'auth.users' thiếu. Đang chạy lại migrations..."
+        fi
+
         # Apply migrations thủ công (backend không có auto-migration)
         local migration_count=0
         local failed_migrations=()
         
         for migration in backend/migrations/*.up.sql; do
             if [ -f "$migration" ]; then
-                local migration_name=$(basename "$migration")
+                local migration_name
+                migration_name=$(basename "$migration")
                 print_info "  ➜ Applying $migration_name..."
                 
-                if docker exec -i ibn-postgres psql -U gateway -d ibn_gateway < "$migration" > /tmp/migration_${migration_count}.log 2>&1; then
+                if docker exec -i ibn-postgres psql -U gateway -d ibn_gateway < "$migration" > "/tmp/migration_${migration_count}.log" 2>&1; then
                     print_success "    ✓ $migration_name"
                     ((migration_count++))
                 else
@@ -2417,44 +2444,66 @@ create_default_admin() {
             for failed in "${failed_migrations[@]}"; do
                 echo "  - $failed"
             done
-            print_info "Xem chi tiết lỗi tại /tmp/migration_*.log"
+            print_info "Xem chi tiết lỗi migrations trong container postgres (ibn-postgres):"
+            echo "  docker exec -it ibn-postgres bash"
+            echo "  ls -la /tmp/migration_*.log"
             return 1
         fi
+
+        # Sau khi migrate lại, re-check table users
+        table_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users');" | tr -d ' ')
     else
-        print_success "✓ Schema 'auth' đã tồn tại"
+        print_success "✓ Schema 'auth' và các bảng cơ bản đã tồn tại"
     fi
     
-    # Kiểm tra table users
-    local table_exists=$(docker exec ibn-postgres psql -U gateway -d ibn_gateway -t -c "SELECT EXISTS(SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users');" | tr -d ' ')
-    
     if [ "$table_exists" != "t" ]; then
-        print_error "Table 'auth.users' không tồn tại sau khi chạy migrations!"
-        print_info "Vui lòng kiểm tra logs migration tại /tmp/migration.log"
+        print_error "Table 'auth.users' vẫn không tồn tại sau khi chạy migrations!"
+        print_info "Vui lòng kiểm tra logs migration trong container postgres (ibn-postgres):"
+        echo "  docker exec -it ibn-postgres bash"
+        echo "  ls -la /tmp/migration_*.log"
         return 1
     fi
     
     print_success "✓ Table 'auth.users' tồn tại"
     
-    # 4. Tạo admin trong PostgreSQL
-    print_info "Đang tạo/cập nhật admin user..."
-    
+    # 4. Sinh bcrypt hash cho password admin123 (compatible với Go bcrypt)
+    print_info "Đang sinh password hash..."
     local admin_email="admin@ibn.vn"
     local admin_username="admin"
     local admin_password_plain="admin123"
-    local password_hash='$2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy'
+    
+    # Sinh hash bằng Python bcrypt với prefix $2a$ (Go bcrypt compatible)
+    local password_hash
+    if check_command python3; then
+        password_hash=$(python3 -c "import bcrypt; print(bcrypt.hashpw(b'$admin_password_plain', bcrypt.gensalt(rounds=10, prefix=b'2a')).decode())" 2>/dev/null)
+    fi
+    
+    # Fallback: Dùng hash có sẵn (đã test với Go bcrypt)
+    if [ -z "$password_hash" ]; then
+        print_warning "Không thể sinh hash bằng Python, dùng hash có sẵn"
+        password_hash='$2a$10$9ztl4PCS90ONiUmXSL7e0eIflXycCj5vrvutzVRUtyU.t8oJwB09C'
+    fi
+    
+    print_success "✓ Password hash đã sẵn sàng"
+
+    # 5. Tạo admin trong PostgreSQL
+    print_info "Đang tạo/cập nhật admin user..."
 
     # Insert vào schema auth.users (không phải public.users)
-    docker exec -i ibn-postgres psql -U gateway -d ibn_gateway <<EOF
-INSERT INTO auth.users (email, password_hash, full_name, role, msp_id, is_active, email_verified)
-VALUES ('$admin_email', '$password_hash', 'Admin User', 'admin', 'Org1MSP', TRUE, TRUE)
+    # Phải escape $ trong password hash để tránh shell interpretation
+    docker exec -i ibn-postgres psql -U gateway -d ibn_gateway <<EOSQL
+INSERT INTO auth.users (email, username, password_hash, full_name, role, msp_id, is_active, email_verified)
+VALUES ('$admin_email', '$admin_username', '$password_hash', 'Admin User', 'admin', 'Org1MSP', TRUE, TRUE)
 ON CONFLICT (email) DO UPDATE SET
+    username = EXCLUDED.username,
     password_hash = EXCLUDED.password_hash,
+    full_name = EXCLUDED.full_name,
     role = EXCLUDED.role,
     msp_id = EXCLUDED.msp_id,
     is_active = EXCLUDED.is_active,
     email_verified = EXCLUDED.email_verified,
     updated_at = CURRENT_TIMESTAMP;
-EOF
+EOSQL
 
     if [ $? -ne 0 ]; then
         print_error "Không thể tạo/cập nhật admin trong database."
@@ -2463,61 +2512,68 @@ EOF
 
     print_success "✓ Đã tạo/cập nhật admin trong database"
 
-    # 5. Thử login qua Backend API để xác nhận
+    # 5. Thử login qua Backend API để xác nhận (nếu backend đang chạy)
     echo ""
-    print_info "Đang kiểm tra đăng nhập qua Backend API..."
-
-    if ! check_command curl; then
-        print_warning "curl không tồn tại, bỏ qua bước kiểm tra đăng nhập."
+    if [ "$backend_status" != "running" ]; then
+        print_warning "Bỏ qua bước test đăng nhập vì backend (ibn-backend) chưa chạy."
     else
-        local login_response
-        local login_status
-        
-        login_response=$(curl -s -w "\n%{http_code}" \
-            "http://localhost:9900/api/v1/auth/login" \
-            -H "Content-Type: application/json" \
-            -d "{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}" 2>/dev/null || echo -e "\n000")
-        
-        login_status=$(echo "$login_response" | tail -1)
-        local response_body=$(echo "$login_response" | head -n -1)
+        print_info "Đang kiểm tra đăng nhập qua Backend API..."
 
-        if [ "$login_status" = "200" ]; then
-            print_success "✓ Đăng nhập thành công!"
-            
-            # Extract access token để verify
-            local access_token=$(echo "$response_body" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
-            if [ -n "$access_token" ]; then
-                print_success "✓ Nhận được access token (${#access_token} chars)"
-            fi
+        if ! check_command curl; then
+            print_warning "curl không tồn tại, bỏ qua bước kiểm tra đăng nhập."
         else
-            print_error "✗ Đăng nhập thất bại (HTTP $login_status)"
-            echo ""
-            print_info "Response body:"
-            echo "$response_body" | head -5
-            echo ""
-            print_info "Có thể backend chưa hoàn toàn sẵn sàng. Vui lòng thử lại sau hoặc kiểm tra logs:"
-            echo "  docker logs ibn-backend"
+            local login_response
+            local login_status
+            
+            login_response=$(curl -s -w "\n%{http_code}" \
+                "http://localhost:9900/api/v1/auth/login" \
+                -H "Content-Type: application/json" \
+                -d "{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}" 2>/dev/null || echo -e "\n000")
+            
+            login_status=$(echo "$login_response" | tail -1)
+            local response_body
+            response_body=$(echo "$login_response" | head -n -1)
+
+            if [ "$login_status" = "200" ]; then
+                print_success "✓ Đăng nhập thành công!"
+                
+                # Extract access token để verify
+                local access_token
+                access_token=$(echo "$response_body" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
+                if [ -n "$access_token" ]; then
+                    print_success "✓ Nhận được access token (${#access_token} chars)"
+                fi
+            else
+                print_error "✗ Đăng nhập thất bại (HTTP $login_status)"
+                echo ""
+                print_info "Response body:"
+                echo "$response_body" | head -5
+                echo ""
+                print_info "Có thể backend chưa hoàn toàn sẵn sàng. Vui lòng thử lại sau hoặc kiểm tra logs:"
+                echo "  docker logs ibn-backend"
+            fi
         fi
     fi
 
     echo ""
     print_header "Thông Tin Tài Khoản Admin (DEV/DEMO)"
     echo ""
-    echo "  📧 Email:    ${CYAN}${BOLD}$admin_email${NC}"
-    echo "  👤 Username: ${CYAN}${BOLD}$admin_username${NC}"
-    echo "  🔑 Password: ${CYAN}${BOLD}$admin_password_plain${NC}"
+    echo -e "  ${GREEN}📧 Email:${NC}       $admin_email"
+    echo -e "  ${GREEN}👤 Username:${NC}    $admin_username"
+    echo -e "  ${GREEN}🔑 Password:${NC}    $admin_password_plain"
     echo ""
-    echo "  🌐 API Endpoint: ${CYAN}http://localhost:9900/api/v1/auth/login${NC}"
+    echo -e "  ${GREEN}🌐 API Endpoint:${NC}"
+    echo "     http://localhost:9900/api/v1/auth/login"
     echo ""
     print_warning "⚠ Tài khoản này CHỈ dùng cho môi trường DEV/DEMO. Không dùng cho production."
     echo ""
     
     # Thêm hướng dẫn test
-    print_info "Test đăng nhập bằng curl:"
+    print_info "Để test đăng nhập, copy và paste lệnh sau:"
     echo ""
-    echo "curl -X POST http://localhost:9900/api/v1/auth/login \\"
-    echo "  -H 'Content-Type: application/json' \\"
-    echo "  -d '{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}'"
+    echo -e "${CYAN}curl -X POST http://localhost:9900/api/v1/auth/login \\${NC}"
+    echo -e "${CYAN}  -H 'Content-Type: application/json' \\${NC}"
+    echo -e "${CYAN}  -d '{\"email\":\"$admin_email\",\"password\":\"$admin_password_plain\"}'${NC}"
     echo ""
 }
 

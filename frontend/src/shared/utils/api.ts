@@ -43,7 +43,8 @@ const api: AxiosInstance = axios.create({
 // Request interceptor - Add token to requests
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('access_token')
+    // Use unified camelCase key for access token
+    const token = localStorage.getItem('accessToken')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -71,7 +72,7 @@ api.interceptors.response.use(
         await tokenRefreshManager.refreshToken()
         
         // Retry original request with new token
-        const newToken = localStorage.getItem('access_token')
+        const newToken = localStorage.getItem('accessToken')
         if (newToken) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`
         }
@@ -79,8 +80,9 @@ api.interceptors.response.use(
         return api(originalRequest)
       } catch (refreshError) {
         // Refresh failed, redirect to login
-        localStorage.removeItem('access_token')
-        localStorage.removeItem('refresh_token')
+        localStorage.removeItem('accessToken')
+        localStorage.removeItem('refreshToken')
+        localStorage.removeItem('tokenExpiresAt')
         window.location.href = '/login'
         return Promise.reject(refreshError)
       }

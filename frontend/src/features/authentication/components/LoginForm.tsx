@@ -72,17 +72,17 @@ export const LoginForm = () => {
       
       toast.success('Đăng nhập thành công!')
       
-      // Wait a bit for token to be stored, then redirect
-      // Use window.location to force a full page reload and ensure ProtectedRoute checks token
+      // Sau khi đăng nhập thành công, chuyển thẳng vào Dashboard
+      // ProtectedRoute sẽ kiểm tra token trong localStorage
       setTimeout(() => {
         const token = localStorage.getItem('accessToken')
         if (import.meta.env.DEV) {
-          console.log('🔍 [DEV] Before redirect, token exists:', !!token)
+          console.log('🔍 [DEV] Before redirect, token exists:', !!token, 'value:', token)
         }
         if (token) {
-          window.location.href = '/'
+          window.location.href = '/dashboard'
         } else {
-          console.error('❌ [DEV] No token found, cannot redirect')
+          console.error('❌ [DEV] No token found, cannot redirect to dashboard')
           toast.error('Đăng nhập thành công nhưng không thể lưu token. Vui lòng thử lại.')
         }
       }, 300)
