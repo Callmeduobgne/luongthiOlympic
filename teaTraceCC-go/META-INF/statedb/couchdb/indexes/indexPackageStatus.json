@@ -1,0 +1,8 @@
+{
+    "index": {
+        "fields": ["docType", "status", "timestamp"]
+    },
+    "ddoc": "indexPackageStatusDoc",
+    "name": "indexPackageStatus",
+    "type": "json"
+}

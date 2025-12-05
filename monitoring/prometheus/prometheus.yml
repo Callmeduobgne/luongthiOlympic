@@ -1,0 +1,117 @@
+# File: monitoring/prometheus/prometheus.yml
+# Prometheus Configuration for IBN Network - Production Optimized
+
+global:
+  scrape_interval: 30s       # Increased for production
+  scrape_timeout: 15s        # Sufficient timeout
+  evaluation_interval: 30s   # Evaluate rules every 30s
+  
+  external_labels:
+    cluster: 'ibn-network'
+    environment: 'production'
+    datacenter: 'hanoi-dc1'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+      timeout: 10s
+      api_version: v2
+
+# Load rules
+rule_files:
+  - 'alerts.yml'
+  - 'recording_rules.yml'  # Recording rules for performance
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus itself
+  - job_name: 'prometheus'
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Node Exporter - System metrics
+  - job_name: 'node-exporter'
+    scrape_interval: 30s
+    scrape_timeout: 25s  # Phù hợp với scrape_interval, tránh client đóng kết nối sớm gây "broken pipe"
+    static_configs:
+      - targets: ['node-exporter-proxy:9100']
+    metric_relabel_configs:
+      # Drop unnecessary metrics for production
+      - source_labels: [__name__]
+        regex: 'node_netstat_.*'
+        action: drop
+
+  # PostgreSQL
+  - job_name: 'postgres'
+    scrape_interval: 30s
+    scrape_timeout: 15s
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+
+  # Docker containers (cAdvisor)
+  - job_name: 'cadvisor'
+    scrape_interval: 30s
+    scrape_timeout: 15s
+    static_configs:
+      - targets: ['cadvisor:8080']
+    metric_relabel_configs:
+      # Keep only important metrics
+      - source_labels: [__name__]
+        regex: 'container_(cpu|memory|network).*'
+        action: keep
+
+  # Backend API
+  - job_name: 'ibn-backend'
+    scrape_interval: 15s  # More frequent for API
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: ['ibn-backend:8080']
+
+  # Fabric Peers (if metrics exposed)
+  - job_name: 'fabric-peers'
+    scrape_interval: 30s
+    scrape_timeout: 15s
+    static_configs:
+      - targets: 
+        - 'peer0.org1.ibn.vn:9443'
+        - 'peer1.org1.ibn.vn:10443'
+        - 'peer2.org1.ibn.vn:11443'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: peer
+
+  # Fabric Orderers
+  - job_name: 'fabric-orderers'
+    scrape_interval: 30s
+    scrape_timeout: 15s
+    static_configs:
+      - targets:
+        - 'orderer.ibn.vn:8443'
+        - 'orderer1.ibn.vn:9443'
+        - 'orderer2.ibn.vn:10443'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+      - source_labels: [__address__]
+        regex: '([^:]+):.*'
+        target_label: orderer
+
+# Remote write for long-term storage (Optional - uncomment if needed)
+# remote_write:
+#   - url: 'https://prometheus-storage.ibn.vn/api/v1/write'
+#     queue_config:
+#       capacity: 10000
+#       max_shards: 50
+#       min_shards: 1

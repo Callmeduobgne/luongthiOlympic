@@ -1,0 +1,8 @@
+{
+    "index": {
+        "fields": ["docType", "timestamp"]
+    },
+    "ddoc": "indexBatchDoc",
+    "name": "indexBatch",
+    "type": "json"
+}

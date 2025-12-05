@@ -1,0 +1,98 @@
+# Prometheus configuration for Hyperledger Fabric network monitoring
+
+global:
+  scrape_interval: 15s      # Scrape targets every 15 seconds
+  evaluation_interval: 15s  # Evaluate rules every 15 seconds
+  external_labels:
+    cluster: 'ibn-fabric'
+    environment: 'production'
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: []
+          # - alertmanager:9093
+
+# Load rules once and periodically evaluate them
+rule_files:
+  # - "alert_rules.yml"
+
+# Scrape configurations
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Orderer nodes metrics
+  - job_name: 'orderer.ibn.vn'
+    static_configs:
+      - targets: ['orderer.ibn.vn:9443']
+        labels:
+          node: 'orderer.ibn.vn'
+          role: 'orderer'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  - job_name: 'orderer1.ibn.vn'
+    static_configs:
+      - targets: ['orderer1.ibn.vn:9447']
+        labels:
+          node: 'orderer1.ibn.vn'
+          role: 'orderer'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  - job_name: 'orderer2.ibn.vn'
+    static_configs:
+      - targets: ['orderer2.ibn.vn:9448']
+        labels:
+          node: 'orderer2.ibn.vn'
+          role: 'orderer'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  # Peer nodes metrics
+  - job_name: 'peer0.org1.ibn.vn'
+    static_configs:
+      - targets: ['peer0.org1.ibn.vn:9446']
+        labels:
+          node: 'peer0.org1.ibn.vn'
+          role: 'peer'
+          org: 'org1'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  - job_name: 'peer1.org1.ibn.vn'
+    static_configs:
+      - targets: ['peer1.org1.ibn.vn:9444']
+        labels:
+          node: 'peer1.org1.ibn.vn'
+          role: 'peer'
+          org: 'org1'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  - job_name: 'peer2.org1.ibn.vn'
+    static_configs:
+      - targets: ['peer2.org1.ibn.vn:9445']
+        labels:
+          node: 'peer2.org1.ibn.vn'
+          role: 'peer'
+          org: 'org1'
+    metrics_path: '/metrics'
+    scheme: 'http'
+
+  # CouchDB metrics (if available)
+  - job_name: 'couchdb'
+    static_configs:
+      - targets:
+          - 'couchdb0:5984'
+          - 'couchdb1:5984'
+          - 'couchdb2:5984'
+        labels:
+          role: 'couchdb'
+    metrics_path: '/_metrics'
+    scheme: 'http'
+

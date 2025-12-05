@@ -1,0 +1,19 @@
+[ req ]
+default_bits        = 256
+distinguished_name  = req_distinguished_name
+req_extensions      = req_ext
+prompt              = no
+
+[ req_distinguished_name ]
+C                   = VN
+ST                  = ThaiNguyen
+O                   = IBN Network
+OU                  = Fabric CA
+CN                  = ca.org1.ibn.vn
+
+[ req_ext ]
+subjectAltName      = @alt_names
+
+[ alt_names ]
+DNS.1               = ca.org1.ibn.vn
+DNS.2               = localhost

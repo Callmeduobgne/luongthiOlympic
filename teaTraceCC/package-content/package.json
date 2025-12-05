@@ -1,0 +1,16 @@
+{
+  "name": "teaTraceCC",
+  "version": "1.1.0",
+  "description": "Hyperledger Fabric chaincode for tea traceability",
+  "main": "index.js",
+  "scripts": {
+    "start": "fabric-chaincode-node start"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "fabric-contract-api": "^2.5.8",
+    "fabric-shim": "^2.5.8"
+  }
+}

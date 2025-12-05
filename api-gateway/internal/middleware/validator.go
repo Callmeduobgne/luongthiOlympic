@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2025 IBN Network
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ */
+
+// Copyright 2024 IBN Network (ICTU Blockchain Network)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package middleware
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/ibn-network/api-gateway/internal/models"
+	"github.com/ibn-network/api-gateway/internal/utils"
+)
+
+// ValidatorMiddleware provides request validation middleware
+type ValidatorMiddleware struct {
+	validator *utils.Validator
+}
+
+// NewValidatorMiddleware creates a new validator middleware
+func NewValidatorMiddleware() *ValidatorMiddleware {
+	return &ValidatorMiddleware{
+		validator: utils.NewValidator(),
+	}
+}
+
+// ValidateBody validates request body against a struct
+func (m *ValidatorMiddleware) ValidateBody(v interface{}) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Decode request body
+			if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+				respondJSON(w, http.StatusBadRequest, models.NewErrorResponse(
+					models.ErrCodeBadRequest,
+					"Invalid request body",
+					err.Error(),
+				))
+				return
+			}
+
+			// Validate struct
+			if err := m.validator.Validate(v); err != nil {
+				respondJSON(w, http.StatusBadRequest, models.NewErrorResponse(
+					models.ErrCodeBadRequest,
+					"Validation failed",
+					err.Error(),
+				))
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+

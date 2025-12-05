@@ -1,0 +1,18 @@
+IBN Docker Packaging Project
+Copyright (c) 2025 IBN Network
+
+This product includes software developed by the IBN Network.
+
+This product uses the following open source software:
+
+- Go (https://go.dev/) - BSD-style license
+- React (https://reactjs.org/) - MIT License
+- Hyperledger Fabric (https://www.hyperledger.org/use/fabric) - Apache License 2.0
+- PostgreSQL (https://www.postgresql.org/) - PostgreSQL License
+- Redis (https://redis.io/) - BSD-3-Clause License
+- Nginx (https://nginx.org/) - BSD-2-Clause License
+
+Portions of this software (Chaincode, Backend, Frontend) are based on Hyperledger Fabric samples and are licensed under the Apache License, Version 2.0.
+See the source file headers for specific license information.
+
+The main project license is MIT (see LICENSE file).

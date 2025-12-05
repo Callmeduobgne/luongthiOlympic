@@ -1,0 +1,95 @@
+# Multi-stage Dockerfile for Admin Service
+
+# Stage 1: Build
+FROM golang:1.23-alpine AS builder
+
+# Build arguments for version injection
+ARG VERSION=dev
+ARG BUILD_DATE=unknown
+ARG GIT_COMMIT=unknown
+
+# Build metadata
+LABEL maintainer="IBN Network Team"
+LABEL description="IBN Admin Service - Chaincode lifecycle management"
+LABEL version="${VERSION}"
+LABEL build-date="${BUILD_DATE}"
+LABEL git-commit="${GIT_COMMIT}"
+
+# Install build dependencies
+RUN apk add --no-cache git make ca-certificates
+
+# Set working directory
+WORKDIR /app
+
+# Configure Go proxy with fallback
+# Use proxy.golang.org first, fallback to direct if proxy fails
+ENV GOPROXY=https://proxy.golang.org,direct
+ENV GOSUMDB=sum.golang.org
+ENV GOTIMEOUT=300s
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies with retry mechanism
+# Retry up to 3 times with exponential backoff
+RUN for i in 1 2 3; do \
+        go mod download && break || \
+        (echo "Attempt $i failed, retrying..." && sleep $((i * 5))); \
+    done || (echo "All download attempts failed" && exit 1)
+
+# Copy source code
+COPY . .
+
+# Build application với version info
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -a -installsuffix cgo \
+    -ldflags "-X main.Version=${VERSION} -X main.BuildDate=${BUILD_DATE} -X main.GitCommit=${GIT_COMMIT}" \
+    -o bin/admin-service cmd/server/main.go
+
+# Stage 2: Runtime
+FROM alpine:3.19
+
+# Install ca-certificates for HTTPS and tools for downloading peer CLI
+# Also install libc6-compat for peer CLI compatibility
+RUN apk --no-cache add ca-certificates tzdata wget tar bash libc6-compat
+
+# Download and install Hyperledger Fabric peer CLI
+# Using Fabric 2.5.9 to match the network version
+RUN cd /tmp && \
+    wget -q https://github.com/hyperledger/fabric/releases/download/v2.5.9/hyperledger-fabric-linux-amd64-2.5.9.tar.gz && \
+    tar -xzf hyperledger-fabric-linux-amd64-2.5.9.tar.gz && \
+    mkdir -p /usr/local/bin && \
+    cp /tmp/bin/peer /usr/local/bin/peer && \
+    chmod +x /usr/local/bin/peer && \
+    cd / && \
+    rm -rf /tmp/hyperledger-fabric-linux-amd64-2.5.9.tar.gz /tmp/bin /tmp/config /tmp/fabric-samples
+
+# Create non-root user
+RUN addgroup -g 1000 appuser && \
+    adduser -D -u 1000 -G appuser appuser
+
+# Set working directory
+WORKDIR /app
+
+# Copy binary from builder
+COPY --from=builder /app/bin/admin-service .
+
+# Set ownership
+RUN chown -R appuser:appuser /app
+
+# Note: Fabric certificates will be mounted as volume in docker-compose.yml
+# Note: Peer CLI is installed at /usr/local/bin/peer and available in PATH
+
+# Switch to non-root user
+USER appuser
+
+# Expose port
+EXPOSE 8090
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:8090/health || exit 1
+
+# Run application
+CMD ["./admin-service"]
+

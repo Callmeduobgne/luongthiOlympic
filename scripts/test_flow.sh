@@ -1,0 +1,126 @@
+#!/bin/bash
+# SPDX-License-Identifier: MIT
+
+# Copyright (c) 2025 IBN Network
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+
+# Configuration
+API_URL="http://localhost:9900"
+EMAIL="admin@ibn.vn"
+PASSWORD="Admin123!"
+
+echo "🚀 Starting Live API Test..."
+
+# 0. Register
+echo -e "\n0️⃣  Registering new user..."
+EMAIL="test_admin_$(date +%s)@ibn.vn"
+REGISTER_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/register" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"email\": \"$EMAIL\",
+    \"password\": \"$PASSWORD\",
+    \"role\": \"admin\",
+    \"msp_id\": \"Org1MSP\"
+  }")
+
+if [[ $REGISTER_RESPONSE == *"error"* ]]; then
+  echo "❌ Registration failed!"
+  echo "Response: $REGISTER_RESPONSE"
+  exit 1
+fi
+echo "✅ Registration successful for $EMAIL"
+
+# 1. Login
+echo -e "\n1️⃣  Logging in..."
+LOGIN_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/auth/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\": \"$EMAIL\", \"password\": \"$PASSWORD\"}")
+
+TOKEN=$(echo $LOGIN_RESPONSE | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+
+if [ -z "$TOKEN" ]; then
+  echo "❌ Login failed!"
+  echo "Response: $LOGIN_RESPONSE"
+  exit 1
+fi
+echo "✅ Login successful! Token acquired."
+
+# 2. Create Batch
+BATCH_ID="BATCH_TEST_$(date +%s)"
+echo -e "\n2️⃣  Creating Batch: $BATCH_ID..."
+CREATE_BATCH_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/teatrace/batches" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"batch_id\": \"$BATCH_ID\",
+    \"farm_name\": \"Thai Nguyen Farm\",
+    \"harvest_date\": \"2025-12-01\",
+    \"certification\": \"VietGAP\",
+    \"certificate_id\": \"CERT_12345\"
+  }")
+
+if [[ $CREATE_BATCH_RESPONSE == *"error"* ]]; then
+  echo "❌ Create Batch failed!"
+  echo "Response: $CREATE_BATCH_RESPONSE"
+  exit 1
+fi
+echo "✅ Batch created successfully!"
+echo "Response: $CREATE_BATCH_RESPONSE"
+
+echo "Sleeping 2s to ensure batch is committed..."
+sleep 2
+
+# 3. Create Package
+PACKAGE_ID="PKG_TEST_$(date +%s)"
+echo -e "\n3️⃣  Creating Package: $PACKAGE_ID..."
+CREATE_PKG_RESPONSE=$(curl -s -X POST "$API_URL/api/v1/teatrace/packages" \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d "{
+    \"package_id\": \"$PACKAGE_ID\",
+    \"batch_id\": \"$BATCH_ID\",
+    \"weight\": 500,
+    \"production_date\": \"2025-12-02\",
+    \"expiry_date\": \"2026-12-02\"
+  }")
+
+if [[ $CREATE_PKG_RESPONSE == *"error"* ]]; then
+  echo "❌ Create Package failed!"
+  echo "Response: $CREATE_PKG_RESPONSE"
+  exit 1
+fi
+echo "✅ Package created successfully!"
+echo "Response: $CREATE_PKG_RESPONSE"
+
+# 4. Verify Package (Get Info)
+echo -e "\n4️⃣  Verifying Package Info..."
+GET_PKG_RESPONSE=$(curl -s -X GET "$API_URL/api/v1/teatrace/packages/$PACKAGE_ID" \
+  -H "Authorization: Bearer $TOKEN")
+
+if [[ $GET_PKG_RESPONSE == *"error"* ]]; then
+  echo "❌ Get Package failed!"
+  echo "Response: $GET_PKG_RESPONSE"
+  exit 1
+fi
+echo "✅ Package info retrieved successfully!"
+echo "Response: $GET_PKG_RESPONSE"
+
+echo -e "\n🎉 Test Completed Successfully!"

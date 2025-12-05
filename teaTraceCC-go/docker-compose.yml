@@ -1,0 +1,44 @@
+# Docker Compose for teaTraceCC as External Chaincode (CCaaS)
+# This runs the chaincode as a separate container that peers connect to
+
+version: '3.8'
+
+networks:
+  fabric-network:
+    external: true
+
+services:
+  teaTraceCC:
+    container_name: teaTraceCC
+    image: teatracecc:1.1.0
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      # Chaincode server address
+      - CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999
+      # This will be set after chaincode is installed
+      - CHAINCODE_ID=${CHAINCODE_ID:-teaTraceCC_1.1.0:placeholder}
+      - CORE_CHAINCODE_ID_NAME=${CHAINCODE_ID:-teaTraceCC_1.1.0:placeholder}
+      # Optional: Hash secret for package verification
+      - HASH_SECRET=${HASH_SECRET:-}
+    ports:
+      - "9999:9999"
+    networks:
+      - fabric-network
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 9999 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    labels:
+      - "service=chaincode"
+      - "chaincode=teaTraceCC"
+      - "version=1.1.0"
