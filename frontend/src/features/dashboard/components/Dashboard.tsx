@@ -63,9 +63,12 @@ export const Dashboard = () => {
   const shouldUsePolling = !useWebSocket || !wsConnected || wsError || (wsConnected && !wsData?.metrics && !wsData?.blocks)
 
   // Always enable polling queries (they will be used as fallback or primary source)
+  // Add a small delay to ensure token is properly set before making API calls
   const { data: metricsPolling, isLoading: metricsLoading, isError: metricsError } = useQuery({
     queryKey: ['dashboard-metrics'],
     queryFn: async () => {
+      // Small delay to ensure token is set in axios interceptor
+      await new Promise(resolve => setTimeout(resolve, 100))
       const result = await dashboardService.getMetricsSummary('ibnchannel')
       // Ensure we return a value, not undefined
       return result || null
@@ -74,15 +77,21 @@ export const Dashboard = () => {
     staleTime: 30000,
     enabled: true, // Always enabled, will be used as fallback
     retry: 2, // Retry failed requests
+    retryDelay: 1000, // Wait 1 second before retry
   })
 
   const { data: blocksPolling, isLoading: blocksLoading, isError: blocksError } = useQuery({
     queryKey: ['dashboard-blocks'],
-    queryFn: () => dashboardService.getLatestBlocks('ibnchannel', 10),
+    queryFn: async () => {
+      // Small delay to ensure token is set in axios interceptor
+      await new Promise(resolve => setTimeout(resolve, 100))
+      return dashboardService.getLatestBlocks('ibnchannel', 10)
+    },
     refetchInterval: shouldUsePolling ? 20000 : false, // Poll every 20s if using polling
     staleTime: 10000,
     enabled: true, // Always enabled, will be used as fallback
     retry: 2, // Retry failed requests
+    retryDelay: 1000, // Wait 1 second before retry
   })
 
   // Use WebSocket data if available and connected, otherwise fallback to polling

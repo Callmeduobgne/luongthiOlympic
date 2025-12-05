@@ -1212,7 +1212,7 @@ create_fabric_channel() {
     local existing_check=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
         -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
         -w /root \
         "${first_peer}" \
@@ -1403,7 +1403,7 @@ join_fabric_peers() {
             -e CORE_PEER_LOCALMSPID="Org1MSP" \
             -e CORE_PEER_TLS_ENABLED=true \
             -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-            -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+            -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
             -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
             "${peer_name}" \
             peer channel list 2>&1 | grep -i "${channel_name}" || echo "")
@@ -1526,20 +1526,30 @@ query_installed_chaincode() {
     
     print_info "Querying installed chaincode on ${peer_name}..."
     
+    # Determine correct port based on peer name
+    local peer_port="7051"
+    if [[ "$peer_name" == *"peer1"* ]]; then
+        peer_port="8051"
+    elif [[ "$peer_name" == *"peer2"* ]]; then
+        peer_port="9051"
+    fi
+    
     # Use Admin MSP for lifecycle queries (required for ACL)
+    set +e
     local output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
         -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
-        -e CORE_PEER_ADDRESS="${peer_name}:7051" \
+        -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
         -w /root \
         "${peer_name}" \
         peer lifecycle chaincode queryinstalled 2>&1)
+    local query_exit_code=$?
+    set -e
     
-    if [ $? -ne 0 ]; then
-        print_warning "Failed to query installed chaincode on ${peer_name} (may need Admin MSP)"
-        # Try to extract from error message or output anyway
-        echo "$output" | tail -10
+    if [ $query_exit_code -ne 0 ]; then
+        print_warning "Failed to query installed chaincode on ${peer_name}"
+        echo "$output" | tail -5
     fi
     
     # Extract package ID from output - try multiple formats
@@ -1697,7 +1707,7 @@ deploy_fabric_chaincode() {
             local channel_list=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
                 -e CORE_PEER_TLS_ENABLED=true \
                 -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
                 -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
                 -w /root \
                 "${peer_name}" \
@@ -1722,6 +1732,31 @@ deploy_fabric_chaincode() {
     if ! check_fabric_container "peer0.org1.ibn.vn"; then
         print_error "Peer containers are not running. Please start the network first."
         return 1
+    fi
+    
+    # Pre-deploy check: Verify Docker socket is working in peer containers
+    print_info "Checking Docker socket connectivity in peers..."
+    
+    local docker_socket_ok=false
+    for retry in 1 2 3; do
+        set +e
+        local docker_check=$(docker exec peer0.org1.ibn.vn sh -c "ls -la /host/var/run/docker.sock 2>/dev/null && echo 'SOCKET_OK'" 2>&1)
+        set -e
+        
+        if echo "$docker_check" | grep -q "SOCKET_OK"; then
+            docker_socket_ok=true
+            break
+        fi
+        
+        print_warning "Docker socket check attempt $retry failed, waiting..."
+        sleep 3
+    done
+    
+    if [ "$docker_socket_ok" = "true" ]; then
+        print_success "Docker socket is accessible in peer containers"
+    else
+        print_warning "Docker socket may not be accessible - chaincode build might use fallback method"
+        print_info "If installation fails, try: sudo service docker restart (in WSL)"
     fi
     
     # Step 0: Build chaincode (for Node.js/TypeScript chaincode)
@@ -1801,11 +1836,141 @@ deploy_fabric_chaincode() {
     
     echo ""
     
+    # Step 0.5: Pre-build chaincode Docker image on host to avoid Docker socket issues in peers
+    print_info "Step 0.5/7: Pre-building chaincode Docker image (avoids Docker socket issues)..."
+    
+    # Create a temporary Dockerfile for chaincode
+    local temp_dockerfile="/tmp/chaincode_dockerfile_$$"
+    cat > "${temp_dockerfile}" << 'DOCKERFILE_EOF'
+FROM node:18-alpine
+RUN apk add --no-cache python3 make g++
+WORKDIR /chaincode
+COPY package*.json ./
+RUN npm ci --omit=dev 2>/dev/null || npm install --omit=dev
+COPY . .
+ENV NODE_ENV=production
+CMD ["node", "index.js"]
+DOCKERFILE_EOF
+    
+    # Build the chaincode image with a predictable name
+    local cc_image_name="chaincode-${chaincode_name}-${chaincode_version}"
+    
+    print_info "Building Docker image: ${cc_image_name}..."
+    
+    # Determine source path for docker build
+    local docker_build_path
+    if [ -d "${abs_chaincode_path}/dist" ]; then
+        docker_build_path="${abs_chaincode_path}/dist"
+    else
+        docker_build_path="${abs_chaincode_path}"
+    fi
+    
+    # Copy Dockerfile to chaincode directory
+    cp "${temp_dockerfile}" "${docker_build_path}/Dockerfile.chaincode"
+    
+    # Build the image
+    set +e
+    docker build -t "${cc_image_name}" -f "${docker_build_path}/Dockerfile.chaincode" "${docker_build_path}" > /dev/null 2>&1
+    local build_exit=$?
+    set -e
+    
+    # Cleanup
+    rm -f "${temp_dockerfile}" "${docker_build_path}/Dockerfile.chaincode"
+    
+    if [ $build_exit -eq 0 ]; then
+        print_success "Chaincode Docker image built successfully: ${cc_image_name}"
+        
+        # Tag the image with the format Fabric expects
+        # This helps Fabric find the pre-built image
+        docker tag "${cc_image_name}" "dev-peer0.org1.ibn.vn-${chaincode_name}_${chaincode_version}" 2>/dev/null || true
+        docker tag "${cc_image_name}" "dev-peer1.org1.ibn.vn-${chaincode_name}_${chaincode_version}" 2>/dev/null || true
+        docker tag "${cc_image_name}" "dev-peer2.org1.ibn.vn-${chaincode_name}_${chaincode_version}" 2>/dev/null || true
+    else
+        print_warning "Failed to pre-build chaincode image, will try standard installation"
+    fi
+    
+    echo ""
+    
     # Step 1: Package chaincode
     print_info "Step 1/7: Packaging chaincode..."
     local package_file="${chaincode_name}_${chaincode_version}.tar.gz"
     local chaincode_label="${chaincode_name}_${chaincode_version}"
     local temp_package="/tmp/${package_file}"
+    
+    # Check if external chaincode (has connection.json and metadata.json)
+    local is_external=false
+    local connection_json_path=""
+    local metadata_json_path=""
+    
+    # Look for connection.json in chaincode directory or parent
+    if [ -f "${abs_chaincode_path}/connection.json" ]; then
+        connection_json_path="${abs_chaincode_path}/connection.json"
+    elif [ -f "$(dirname "${abs_chaincode_path}")/connection.json" ]; then
+        connection_json_path="$(dirname "${abs_chaincode_path}")/connection.json"
+    elif [ -f "chaincode/${chaincode_name}/connection.json" ]; then
+        connection_json_path="chaincode/${chaincode_name}/connection.json"
+    fi
+    
+    # Look for metadata.json
+    if [ -f "${abs_chaincode_path}/metadata.json" ]; then
+        metadata_json_path="${abs_chaincode_path}/metadata.json"
+    elif [ -f "$(dirname "${abs_chaincode_path}")/metadata.json" ]; then
+        metadata_json_path="$(dirname "${abs_chaincode_path}")/metadata.json"
+    elif [ -f "chaincode/${chaincode_name}/metadata.json" ]; then
+        metadata_json_path="chaincode/${chaincode_name}/metadata.json"
+    fi
+    
+    if [ -n "$connection_json_path" ] && [ -n "$metadata_json_path" ]; then
+        is_external=true
+        print_info "Detected external chaincode mode (connection.json + metadata.json found)"
+        
+        # For external chaincode, start chaincode service first
+        local chaincode_service="chaincode-${chaincode_name}"
+        print_info "Starting external chaincode service: ${chaincode_service}..."
+        
+        # Check if service exists in docker-compose
+        if docker compose ps --services 2>/dev/null | grep -q "^${chaincode_service}$"; then
+            # Start chaincode service
+            docker compose up -d "${chaincode_service}" > /dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+                print_success "Chaincode service started: ${chaincode_service}"
+                
+                # Wait for chaincode service to be ready (check health or port)
+                print_info "Waiting for chaincode service to be ready..."
+                local max_wait=60
+                local wait_count=0
+                local service_ready=false
+                
+                while [ $wait_count -lt $max_wait ]; do
+                    # Check if container is running
+                    if docker ps --format "{{.Names}}" | grep -q "^${chaincode_service}$"; then
+                        # Check if port 9999 is listening (chaincode gRPC port)
+                        if docker exec "${chaincode_service}" sh -c "nc -z localhost 9999" > /dev/null 2>&1; then
+                            service_ready=true
+                            break
+                        fi
+                    fi
+                    sleep 2
+                    wait_count=$((wait_count + 2))
+                    echo -n "."
+                done
+                echo ""
+                
+                if [ "$service_ready" = true ]; then
+                    print_success "Chaincode service is ready"
+                else
+                    print_warning "Chaincode service may not be fully ready, but continuing..."
+                fi
+            else
+                print_warning "Failed to start chaincode service, but continuing..."
+            fi
+        else
+            print_warning "Chaincode service '${chaincode_service}' not found in docker-compose.yml"
+            print_info "Please ensure chaincode service is defined in docker-compose.yml"
+        fi
+        echo ""
+    fi
     
     # Use first peer to package chaincode
     local first_peer="peer0.org1.ibn.vn"
@@ -1835,17 +2000,29 @@ deploy_fabric_chaincode() {
         return 1
     fi
     
+    # For external chaincode, copy connection.json and metadata.json
+    if [ "$is_external" = true ]; then
+        print_info "Copying external chaincode configuration files..."
+        docker cp "${connection_json_path}" "${first_peer}:${temp_chaincode_dir}/connection.json" > /dev/null 2>&1
+        docker cp "${metadata_json_path}" "${first_peer}:${temp_chaincode_dir}/metadata.json" > /dev/null 2>&1
+    fi
+    
     # Package chaincode inside peer container
     print_info "Creating chaincode package..."
+    local chaincode_lang="node"
+    if [ "$is_external" = true ]; then
+        chaincode_lang="external"
+    fi
+    
     local package_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-        -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+        -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
         -w /root \
         "${first_peer}" \
         peer lifecycle chaincode package "${package_file}" \
         --path "${temp_chaincode_dir}" \
-        --lang node \
+        --lang "${chaincode_lang}" \
         --label "${chaincode_label}" 2>&1)
     
     if [ $? -ne 0 ]; then
@@ -1908,50 +2085,52 @@ deploy_fabric_chaincode() {
             docker cp "${temp_package}" "${peer_name}:/root/${package_file}" > /dev/null 2>&1
         fi
         
-        # Install chaincode (can use peer MSP for install, but Admin MSP for query)
-        local install_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+        # Install chaincode
+        print_info "Running install command (may take 1-2 minutes)..."
+        
+        # Temporarily disable exit on error for this command
+        set +e
+        local install_output
+        install_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
             -e CORE_PEER_TLS_ENABLED=true \
             -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-            -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+            -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
             -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
             -w /root \
             "${peer_name}" \
             peer lifecycle chaincode install "${package_file}" 2>&1)
+        local install_exit_code=$?
+        set -e
         
-        if [ $? -eq 0 ]; then
+        # Check result
+        if [ $install_exit_code -eq 0 ]; then
             print_success "Installed on ${peer_name}"
             install_success=$((install_success + 1))
             
-            # Try to extract package ID from install output first
+            # Extract package ID from install output
             local pkg_id=""
-            
-            # Multiple formats to try:
-            # 1. "Installed remotely: response:<status:200 payload:"\nEteaTraceCC_1.0:hash..."
-            pkg_id=$(echo "$install_output" | grep -oE "${chaincode_label}:[a-f0-9]{64,}" | head -1)
-            
-            # 2. "Installed chaincode with package ID 'teaTraceCC_1.0:hash...'"
-            if [ -z "$pkg_id" ]; then
-                pkg_id=$(echo "$install_output" | grep -oE "package ID ['\"]?${chaincode_label}:[a-f0-9]+" | sed "s/.*package ID ['\"]\?//" | head -1)
-            fi
-            
-            # 3. "Package ID: teaTraceCC_1.0:hash..."
-            if [ -z "$pkg_id" ]; then
-                pkg_id=$(echo "$install_output" | grep -i "Package ID" | grep -oE "${chaincode_label}:[a-f0-9]+" | head -1)
-            fi
-            
-            # If not found in install output, try querying with Admin MSP
-            if [ -z "$pkg_id" ]; then
-                pkg_id=$(query_installed_chaincode "${peer_name}" "${chaincode_label}")
-            fi
+            pkg_id=$(echo "$install_output" | grep -oE "[a-zA-Z0-9_]+:[a-f0-9]{64}" | head -1)
             
             if [ -n "$pkg_id" ]; then
                 package_ids+=("${pkg_id}")
-                print_info "Package ID on ${peer_name}: ${pkg_id}"
+                print_info "Package ID: ${pkg_id}"
             else
-                print_warning "Could not extract package ID from ${peer_name}, but install was successful"
+                print_warning "Could not extract package ID from output"
+            fi
+        elif echo "$install_output" | grep -qi "already exists"; then
+            print_success "Chaincode already installed on ${peer_name}"
+            install_success=$((install_success + 1))
+            
+            # Try to extract package ID
+            local pkg_id=""
+            pkg_id=$(echo "$install_output" | grep -oE "[a-zA-Z0-9_]+:[a-f0-9]{64}" | head -1)
+            if [ -n "$pkg_id" ]; then
+                package_ids+=("${pkg_id}")
+                print_info "Package ID: ${pkg_id}"
             fi
         else
-            print_error "Failed to install on ${peer_name}: $install_output"
+            print_error "Failed to install on ${peer_name}"
+            echo "$install_output" | tail -3
         fi
     done
     
@@ -1970,12 +2149,29 @@ deploy_fabric_chaincode() {
     # Get package ID (use first one)
     local package_id="${package_ids[0]}"
     if [ -z "$package_id" ]; then
-        print_warning "Could not determine package ID, trying to query..."
-        package_id=$(query_installed_chaincode "peer0.org1.ibn.vn" "${chaincode_label}")
+        print_warning "Could not determine package ID from install output, trying direct query..."
+        set +e
+        local query_output
+        query_output=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+            -e CORE_PEER_TLS_ENABLED=true \
+            -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+            -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+            -e CORE_PEER_ADDRESS="peer0.org1.ibn.vn:7051" \
+            peer0.org1.ibn.vn \
+            peer lifecycle chaincode queryinstalled 2>&1)
+        local query_exit=$?
+        set -e
+        
+        if [ $query_exit -eq 0 ]; then
+            package_id=$(echo "$query_output" | grep -oE "[a-zA-Z0-9_]+:[a-f0-9]{64}" | head -1)
+        else
+            print_warning "Query failed, trying to continue..."
+        fi
     fi
     
     if [ -z "$package_id" ]; then
         print_error "Could not determine package ID. Please check installation logs."
+        print_info "Try running: docker exec peer0.org1.ibn.vn peer lifecycle chaincode queryinstalled"
         rm -f "${temp_package}"
         return 1
     fi
@@ -2172,7 +2368,7 @@ bootstrap_network() {
             local channel_list=$(docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
                 -e CORE_PEER_TLS_ENABLED=true \
                 -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
-                -e CORE_PEER_MSPCONFIGPATH="/etc/hyperledger/fabric/msp" \
+                -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
                 -e CORE_PEER_ADDRESS="${peer_name}:${peer_port}" \
                 -w /root \
                 "${peer_name}" \
@@ -2311,11 +2507,12 @@ show_main_menu() {
     print_menu_option "6" "🛑" "Stop Project" "(Dừng toàn bộ)"
     print_menu_option "7" "👀" "View Error Logs" "(Xem logs lỗi)" "Chỉ hiển thị ERROR, WARN, PANIC"
     print_menu_option "8" "👑" "Create Default Admin" "(Tạo admin để đăng nhập hệ thống)"
-    print_menu_option "9" "❌" "Exit" "(Thoát)"
+    print_menu_option "9" "🧪" "Create 100 Test Batches" "(Tạo dữ liệu test cho QR verification)"
+    print_menu_option "10" "❌" "Exit" "(Thoát)"
     
     echo -e "${CYAN}${BOLD}╚${DIVIDER}╝${NC}"
     echo ""
-    echo -ne "${BOLD}➜ Nhập lựa chọn của bạn (1-9): ${NC}"
+    echo -ne "${BOLD}➜ Nhập lựa chọn của bạn (1-10): ${NC}"
 }
 
 # Create default admin user (DEV/DEMO only)
@@ -2576,7 +2773,95 @@ EOSQL
     echo ""
 }
 
+create_test_batches() {
+    print_header "Create 100 Test Batches"
+    echo ""
+    
+    # Check if chaincode is deployed
+    print_info "Checking if chaincode is deployed..."
+    local chaincode_check=$(docker exec \
+        -e CORE_PEER_LOCALMSPID=Org1MSP \
+        -e CORE_PEER_MSPCONFIGPATH=/tmp/admin_msp \
+        peer0.org1.ibn.vn \
+        peer lifecycle chaincode querycommitted -C ibnchannel 2>&1 | grep -i "teaTraceCC" || echo "")
+    
+    if [ -z "$chaincode_check" ]; then
+        print_error "Chaincode teaTraceCC is not deployed on channel ibnchannel"
+        print_info "Please deploy chaincode first (Option 5)"
+        return 1
+    fi
+    
+    print_success "Chaincode is deployed"
+    echo ""
+    
+    # Farm locations for variety
+    local farms=("Mộc Châu" "Tân Cương" "Thái Nguyên" "Lâm Đồng" "Phú Thọ")
+    local processing=("Sấy khô tự nhiên" "Sấy máy" "Ủ men" "Rang xay" "Hấp chín")
+    local quality=("Loại A" "Loại B" "Loại C" "Đặc biệt" "Xuất khẩu")
+    
+    print_info "Creating 100 test batches..."
+    echo ""
+    
+    local success_count=0
+    local fail_count=0
+    
+    for i in $(seq 1 100); do
+        # Generate batch data
+        local batch_id="BATCH$(printf "%03d" $i)"
+        local farm_idx=$((i % 5))
+        local farm="${farms[$farm_idx]}"
+        local processing_idx=$((i % 5))
+        local processing_info="${processing[$processing_idx]}"
+        local quality_idx=$((i % 5))
+        local quality_cert="${quality[$quality_idx]}"
+        
+        # Generate harvest date (random date in last 30 days)
+        local days_ago=$((RANDOM % 30))
+        local harvest_date=$(date -d "$days_ago days ago" +%Y-%m-%d 2>/dev/null || date -v-${days_ago}d +%Y-%m-%d 2>/dev/null || date +%Y-%m-%d)
+        
+        # Create batch via chaincode
+        local result=$(docker exec \
+            -e CORE_PEER_LOCALMSPID=Org1MSP \
+            -e CORE_PEER_MSPCONFIGPATH=/tmp/admin_msp \
+            -e CORE_PEER_ADDRESS=peer0.org1.ibn.vn:7051 \
+            peer0.org1.ibn.vn \
+            peer chaincode invoke \
+            -C ibnchannel \
+            -n teaTraceCC \
+            -c "{\"function\":\"createBatch\",\"Args\":[\"$batch_id\",\"$farm\",\"$harvest_date\",\"$processing_info\",\"$quality_cert\"]}" \
+            --waitForEvent \
+            --tls \
+            --cafile /etc/hyperledger/fabric/tls/ca.crt 2>&1)
+        
+        if echo "$result" | grep -q "Chaincode invoke successful"; then
+            success_count=$((success_count + 1))
+            if [ $((i % 10)) -eq 0 ]; then
+                print_success "Created $i/100 batches..."
+            fi
+        else
+            fail_count=$((fail_count + 1))
+            if [ $fail_count -le 3 ]; then
+                print_warning "Failed to create batch $batch_id"
+            fi
+        fi
+    done
+    
+    echo ""
+    print_header "Summary"
+    echo ""
+    print_success "Successfully created: $success_count batches"
+    if [ $fail_count -gt 0 ]; then
+        print_warning "Failed: $fail_count batches"
+    fi
+    echo ""
+    
+    print_info "You can now test QR verification with these batch IDs:"
+    echo "  BATCH001, BATCH002, ..., BATCH100"
+    echo ""
+}
+
 perform_fresh_setup() {
+
     print_info "Đang thực hiện Fresh Setup..."
     cleanup_environment
     
@@ -2932,7 +3217,7 @@ main() {
             print_info "     - Tạo lại crypto + genesis block đồng bộ"
             echo ""
             project_ready=false
-            missing_items+=("Fabric certificates (inconsistent structure - run Fresh Setup)")}
+            missing_items+=("Fabric certificates (inconsistent structure - run Fresh Setup)")
         fi
     fi
     
@@ -3056,6 +3341,10 @@ main() {
                 create_default_admin
                 ;;
             9)
+                print_info "Đang tạo 100 test batches..."
+                create_test_batches
+                ;;
+            10)
                 print_info "Tạm biệt!"
                 exit 0
                 ;;
@@ -3070,6 +3359,7 @@ main() {
     done
     
     return 0
+}
 
 # Refresh PATH and GOPATH after Go installation
 refresh_go_path() {

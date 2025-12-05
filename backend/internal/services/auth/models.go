@@ -62,7 +62,7 @@ type APIKey struct {
 	Permissions map[string]interface{} `json:"permissions,omitempty"`
 	IsActive    bool                   `json:"is_active"`
 	LastUsedAt  *time.Time             `json:"last_used_at,omitempty"`
-	ExpiresAt   *time.Time             `json:"expires_at,omitempty"`
+	ExpiresAt   *time.Time             `json:"expiresAt,omitempty"`
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
 	DeletedAt   *time.Time             `json:"deleted_at,omitempty"`
@@ -76,7 +76,7 @@ type RefreshToken struct {
 	DeviceInfo *string    `json:"device_info,omitempty"`
 	IPAddress  *string    `json:"ip_address,omitempty"`
 	IsRevoked  bool       `json:"is_revoked"`
-	ExpiresAt  time.Time  `json:"expires_at"`
+	ExpiresAt  time.Time  `json:"expiresAt"`
 	CreatedAt  time.Time  `json:"created_at"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 }
@@ -89,9 +89,9 @@ type LoginRequest struct {
 
 // LoginResponse represents login response
 type LoginResponse struct {
-	AccessToken  string    `json:"access_token"`
-	RefreshToken string    `json:"refresh_token"`
-	ExpiresAt    time.Time `json:"expires_at"`
+	AccessToken  string    `json:"accessToken"`
+	RefreshToken string    `json:"refreshToken"`
+	ExpiresAt    time.Time `json:"expiresAt"`
 	User         *User     `json:"user"`
 }
 
@@ -106,7 +106,7 @@ type RegisterRequest struct {
 
 // RefreshTokenRequest represents refresh token request
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refreshToken" validate:"required"`
 }
 
 // CreateAPIKeyRequest represents API key creation request
@@ -114,7 +114,7 @@ type CreateAPIKeyRequest struct {
 	Name        string                 `json:"name" validate:"required"`
 	Description *string                `json:"description,omitempty"`
 	Permissions map[string]interface{} `json:"permissions,omitempty"`
-	ExpiresAt   *time.Time             `json:"expires_at,omitempty"`
+	ExpiresAt   *time.Time             `json:"expiresAt,omitempty"`
 }
 
 // CreateAPIKeyResponse represents API key creation response

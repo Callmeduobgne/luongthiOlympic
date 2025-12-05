@@ -301,6 +301,10 @@ services:
     - CORE_CHAINCODE_EXECUTETIMEOUT=300s
     - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
     - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_VM_DOCKER_ATTACHSTDOUT=false
+    - CORE_CHAINCODE_LOGGING_LEVEL=info
+    - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:2.5.9
+    - CORE_CHAINCODE_PULL=false
     - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
     - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb0:5984
     - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
@@ -362,6 +366,10 @@ services:
     - CORE_METRICS_PROVIDER=prometheus
     - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
     - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_VM_DOCKER_ATTACHSTDOUT=false
+    - CORE_CHAINCODE_LOGGING_LEVEL=info
+    - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:2.5.9
+    - CORE_CHAINCODE_PULL=false
     - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
     - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb1:5984
     - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
@@ -423,6 +431,10 @@ services:
     - CORE_METRICS_PROVIDER=prometheus
     - CORE_VM_ENDPOINT=unix:///host/var/run/docker.sock
     - CORE_VM_DOCKER_HOSTCONFIG_NETWORKMODE=ibn-network
+    - CORE_VM_DOCKER_ATTACHSTDOUT=false
+    - CORE_CHAINCODE_LOGGING_LEVEL=info
+    - CORE_CHAINCODE_BUILDER=hyperledger/fabric-ccenv:2.5.9
+    - CORE_CHAINCODE_PULL=false
     - CORE_LEDGER_STATE_STATEDATABASE=CouchDB
     - CORE_LEDGER_STATE_COUCHDBCONFIG_COUCHDBADDRESS=couchdb2:5984
     - CORE_LEDGER_STATE_COUCHDBCONFIG_USERNAME=admin
@@ -1273,3 +1285,29 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+  chaincode-teaTraceCC:
+    container_name: chaincode-teaTraceCC
+    image: node:18-alpine
+    working_dir: /app
+    command: sh -c "npm install --omit=dev && node dist/start.js"
+    environment:
+    - CHAINCODE_ID=teaTraceCC_1.0:latest
+    - CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999
+    - CORE_CHAINCODE_ID_NAME=teaTraceCC_1.0:latest
+    - CORE_PEER_TLS_ENABLED=true
+    volumes:
+    - ./teaTraceCC/dist:/app/dist
+    - ./teaTraceCC/package.json:/app/package.json
+    - ./teaTraceCC/package-lock.json:/app/package-lock.json
+    networks:
+    - ibn-network
+    restart: unless-stopped
+    depends_on:
+      peer0.org1.ibn.vn:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "sh", "-c", "nc -z localhost 9999 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s

@@ -122,13 +122,17 @@ export const authService = {
       // Store tokens
       if (authData.accessToken) {
         localStorage.setItem('accessToken', authData.accessToken)
-        if (import.meta.env.DEV) {
-          console.log('✅ [DEV] Token stored in localStorage')
-        }
+        // Always log for debugging
+        console.log('✅ [AuthService] Token stored in localStorage:', {
+          tokenLength: authData.accessToken.length,
+          tokenPreview: `${authData.accessToken.substring(0, 20)}...`,
+          timestamp: new Date().toISOString(),
+        })
+        // Dispatch custom event to notify ProtectedRoute of token change
+        window.dispatchEvent(new Event('localStorageChange'))
+        console.log('✅ [AuthService] localStorageChange event dispatched')
       } else {
-        if (import.meta.env.DEV) {
-          console.error('❌ [DEV] No accessToken in response:', authData)
-        }
+        console.error('❌ [AuthService] No accessToken in response:', authData)
       }
 
       if (authData.refreshToken) {

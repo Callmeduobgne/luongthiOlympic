@@ -56,8 +56,13 @@ export const HomeHeader = () => {
   // Fetch user info and avatar from API or localStorage
   useEffect(() => {
     if (isAuthenticated) {
-      fetchUserInfo()
-      fetchUserAvatar()
+      // Add delay to ensure token is properly set in axios interceptor
+      // This prevents 401 errors right after login
+      // Matches the delay pattern used in Header component
+      const timer = setTimeout(() => {
+        fetchUserInfo()
+        fetchUserAvatar()
+      }, 800) // 800ms delay
 
       // Listen for avatar updates from ProfilePopup
       const handleAvatarUpdate = () => {
@@ -67,6 +72,7 @@ export const HomeHeader = () => {
       window.addEventListener('avatarUpdated', handleAvatarUpdate)
 
       return () => {
+        clearTimeout(timer)
         window.removeEventListener('avatarUpdated', handleAvatarUpdate)
       }
     } else {

@@ -23,7 +23,7 @@ export function useDashboardWebSocket(channel: string) {
   const [error, setError] = useState<Error | null>(null)
 
   useEffect(() => {
-    const token = localStorage.getItem('access_token')
+    const token = localStorage.getItem('accessToken')
     if (!token || !channel) {
       return
     }

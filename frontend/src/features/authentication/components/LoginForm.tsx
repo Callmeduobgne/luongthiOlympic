@@ -32,6 +32,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
+import { useNavigate } from 'react-router-dom'
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 import toast from 'react-hot-toast'
@@ -45,6 +46,7 @@ type LoginFormData = z.infer<typeof loginSchema>
 
 export const LoginForm = () => {
   const { login, isLoading } = useAuth()
+  const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const {
     register,
@@ -60,32 +62,52 @@ export const LoginForm = () => {
       if (import.meta.env.DEV) {
         console.log('🔐 [DEV] Login attempt:', { email: data.email, password: '***' })
       }
-      
+
       await login(data)
-      
-      if (import.meta.env.DEV) {
-        console.log('✅ [DEV] Login successful')
-        // Check if token is stored
-        const token = localStorage.getItem('accessToken')
-        console.log('🔑 [DEV] Token in localStorage:', token ? 'YES' : 'NO')
+
+      // Always log for debugging
+      console.log('✅ [LoginForm] Login successful')
+      // Check if token is stored
+      const token = localStorage.getItem('accessToken')
+      console.log('🔑 [LoginForm] Token in localStorage:', {
+        exists: !!token,
+        length: token?.length || 0,
+        preview: token ? `${token.substring(0, 20)}...` : 'null',
+        timestamp: new Date().toISOString(),
+      })
+
+      // Verify token is stored before redirect
+      if (!token) {
+        console.error('❌ [LoginForm] No token found after login, cannot redirect')
+        toast.error('Đăng nhập thành công nhưng không thể lưu token. Vui lòng thử lại.')
+        return
       }
-      
+
       toast.success('Đăng nhập thành công!')
-      
-      // Sau khi đăng nhập thành công, chuyển thẳng vào Dashboard
-      // ProtectedRoute sẽ kiểm tra token trong localStorage
+
+      // Use React Router navigate instead of window.location.href
+      // This ensures proper navigation within React Router context
+      console.log('🔍 [LoginForm] About to redirect to homepage', {
+        hasToken: !!token,
+        timestamp: new Date().toISOString(),
+      })
+
+      // Longer delay to ensure token is stored and ProtectedRoute can detect it
+      // This prevents race condition where ProtectedRoute checks before token is set
       setTimeout(() => {
-        const token = localStorage.getItem('accessToken')
-        if (import.meta.env.DEV) {
-          console.log('🔍 [DEV] Before redirect, token exists:', !!token, 'value:', token)
-        }
-        if (token) {
-          window.location.href = '/dashboard'
+        const verifyToken = localStorage.getItem('accessToken')
+        console.log('🔍 [LoginForm] Pre-navigate token check:', {
+          exists: !!verifyToken,
+          timestamp: new Date().toISOString(),
+        })
+        if (verifyToken) {
+          navigate('/', { replace: true })
+          console.log('✅ [LoginForm] Navigated to homepage')
         } else {
-          console.error('❌ [DEV] No token found, cannot redirect to dashboard')
-          toast.error('Đăng nhập thành công nhưng không thể lưu token. Vui lòng thử lại.')
+          console.error('❌ [LoginForm] Token disappeared before navigate!')
+          toast.error('Token không tồn tại. Vui lòng đăng nhập lại.')
         }
-      }, 300)
+      }, 300) // Increased delay to 300ms
     } catch (error) {
       const axiosError = error as {
         message?: string
@@ -110,7 +132,7 @@ export const LoginForm = () => {
           },
         })
       }
-      
+
       const errorMessage =
         axiosError.response?.data?.message ||
         axiosError.response?.data?.error?.message ||

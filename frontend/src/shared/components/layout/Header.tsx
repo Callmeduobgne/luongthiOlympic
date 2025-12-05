@@ -205,29 +205,68 @@ export const Header = ({ }: HeaderProps) => {
   // Fetch user avatar from API or localStorage
   useEffect(() => {
     if (isAuthenticated) {
-      fetchUserAvatar()
-
-      // Listen for avatar updates from ProfilePopup
-      const handleAvatarUpdate = () => {
+      // Add delay to ensure token is properly set in axios interceptor
+      // This prevents 401 errors right after login
+      // Increased to 800ms for maximum reliability
+      const timer = setTimeout(() => {
         fetchUserAvatar()
-      }
-      window.addEventListener('avatarUpdated', handleAvatarUpdate)
+      }, 800) // 800ms delay
 
-      return () => {
+      return () => clearTimeout(timer)
+    }
+
+    // Listen for token changes (after login) and avatar updates
+    const handleTokenChange = () => {
+      if (authService.isAuthenticated()) {
+        console.log('🔑 [Header] Token detected, fetching avatar...')
+        // Also add delay for token change events
+        setTimeout(() => {
+          fetchUserAvatar()
+        }, 800)
+      }
+    }
+
+    const handleAvatarUpdate = () => {
+      // No delay for avatar updates since token is already set
+      fetchUserAvatar()
+    }
+
+    if (isAuthenticated) {
+      window.addEventListener('avatarUpdated', handleAvatarUpdate)
+    }
+
+    window.addEventListener('localStorageChange', handleTokenChange)
+
+    return () => {
+      if (isAuthenticated) {
         window.removeEventListener('avatarUpdated', handleAvatarUpdate)
       }
-    } else {
+      window.removeEventListener('localStorageChange', handleTokenChange)
+    }
+  }, [isAuthenticated])
+
+  useEffect(() => {
+    if (!isAuthenticated) {
       setUserAvatar(null)
     }
   }, [isAuthenticated])
 
   const fetchUserAvatar = async () => {
     try {
+      // Check if token exists first
+      const token = localStorage.getItem('accessToken')
+      if (!token) {
+        console.log('🔒 [Header] No token found, skipping avatar fetch')
+        return
+      }
+
       // Check localStorage first for quick display
       const savedAvatar = localStorage.getItem('user_avatar')
       if (savedAvatar) {
         setUserAvatar(savedAvatar)
       }
+
+      console.log('📡 [Header] Fetching user profile...')
 
       // Fetch from API to get latest from DB
       const response = await api.get<{ success: boolean; data: { avatar_url?: string; avatarUrl?: string } }>(
@@ -249,9 +288,14 @@ export const Header = ({ }: HeaderProps) => {
         // Keep localStorage avatar if API doesn't return one
         setUserAvatar(savedAvatar)
       }
-    } catch (error) {
-      console.error('Failed to fetch user avatar:', error)
+    } catch (error: any) {
+      // Don't log 401 errors as errors - they're handled by interceptor
+      // Only log other errors
+      if (error.response?.status !== 401) {
+        console.error('Failed to fetch user avatar:', error)
+      }
       // Fallback to localStorage if API fails
+      // Don't clear token on API errors - let interceptor handle 401
       const savedAvatar = localStorage.getItem('user_avatar')
       if (savedAvatar) {
         setUserAvatar(savedAvatar)

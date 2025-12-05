@@ -11,6 +11,7 @@
     "format": "prettier --write 'src/**/*.ts' 'tests/**/*.ts'",
     "format:check": "prettier --check 'src/**/*.ts' 'tests/**/*.ts'",
     "start": "fabric-chaincode-node start",
+    "start:external": "node dist/start.js",
     "watch": "ts-node-dev --respawn --transpileOnly src/index.ts",
     "test": "jest",
     "test:watch": "jest --watch",

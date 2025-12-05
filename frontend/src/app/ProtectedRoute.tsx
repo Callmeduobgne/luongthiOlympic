@@ -42,23 +42,83 @@ export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
 
   useEffect(() => {
-    // Check authentication status immediately
+    // Declare pollInterval at useEffect scope so it's accessible in cleanup
+    let pollInterval: NodeJS.Timeout | null = null
+    let initialCheckTimeout: NodeJS.Timeout | null = null
+
+    // Check authentication status
     const checkAuth = () => {
+      const token = localStorage.getItem('accessToken')
       const authenticated = authService.isAuthenticated()
+
+      // Always log for debugging (not just DEV mode)
+      console.log('🔒 [ProtectedRoute] Auth check:', {
+        authenticated,
+        hasToken: !!token,
+        tokenLength: token?.length || 0,
+        tokenPreview: token ? `${token.substring(0, 20)}...` : 'null',
+        timestamp: new Date().toISOString(),
+      })
+
       setIsAuthenticated(authenticated)
+      return authenticated
     }
 
-    checkAuth()
-    
-    // Also check on storage events (in case token is set in another tab)
-    const handleStorageChange = () => {
-      checkAuth()
+    // Check on storage events (for cross-tab changes)
+    const handleStorageChange = (e: StorageEvent) => {
+      // Only react to accessToken changes
+      if (e.key === 'accessToken' || e.key === null) {
+        const auth = checkAuth()
+        // If authenticated, stop polling
+        if (auth && pollInterval) {
+          clearInterval(pollInterval)
+          pollInterval = null
+        }
+      }
     }
-    
+
+    // Custom event for same-tab localStorage changes
+    const handleCustomStorageChange = () => {
+      const auth = checkAuth()
+      // If authenticated, stop polling
+      if (auth && pollInterval) {
+        clearInterval(pollInterval)
+        pollInterval = null
+      }
+    }
+
+    // Add event listeners
     window.addEventListener('storage', handleStorageChange)
-    
+    window.addEventListener('localStorageChange', handleCustomStorageChange)
+
+    // Add a small delay before initial check to avoid race condition
+    // This gives time for token to be set after login
+    initialCheckTimeout = setTimeout(() => {
+      const initialAuth = checkAuth()
+
+      // Only poll if not authenticated initially (fallback for edge cases)
+      // Poll less frequently (2 seconds) and stop once authenticated
+      if (!initialAuth) {
+        pollInterval = setInterval(() => {
+          const auth = checkAuth()
+          // Stop polling once authenticated
+          if (auth && pollInterval) {
+            clearInterval(pollInterval)
+            pollInterval = null
+          }
+        }, 2000)
+      }
+    }, 200) // 200ms delay to ensure token is set
+
     return () => {
+      if (initialCheckTimeout) {
+        clearTimeout(initialCheckTimeout)
+      }
       window.removeEventListener('storage', handleStorageChange)
+      window.removeEventListener('localStorageChange', handleCustomStorageChange)
+      if (pollInterval) {
+        clearInterval(pollInterval)
+      }
     }
   }, [])
 

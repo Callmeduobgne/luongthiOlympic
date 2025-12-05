@@ -2,6 +2,49 @@
 
 Tài liệu này hướng dẫn chi tiết cách xây dựng lại mạng lưới Hyperledger Fabric (IBN Network) **bằng các lệnh thủ công**, giúp bạn kiểm soát hoàn toàn quá trình.
 
+## 🚨 Vấn Đề Thường Gặp & Giải Pháp Nhanh
+
+### ❌ Script không hoạt động / Lỗi "broken pipe" khi deploy chaincode
+
+**Nguyên nhân phổ biến:**
+- **WSL2 Docker socket limitation** (nếu đang dùng WSL2)
+- Docker daemon quá tải hoặc timeout
+- Chaincode package thiếu file
+
+**Giải pháp nhanh (theo thứ tự):**
+
+1. **Pre-pull builder images** (5 phút):
+   ```bash
+   docker pull hyperledger/fabric-nodeenv:2.5.9
+   docker pull hyperledger/fabric-ccenv:2.5.9
+   # Sau đó chạy lại script hoặc bước 9.3
+   ```
+
+2. **Restart Docker Desktop** (Windows):
+   - Mở Docker Desktop → Settings → Apply & Restart
+
+3. **Tăng Docker resources** (Windows):
+   - Docker Desktop → Settings → Resources → Advanced
+   - Memory: ít nhất 4GB (khuyến nghị 8GB)
+   - CPUs: ít nhất 2 (khuyến nghị 4)
+
+4. **Skip chaincode tạm thời** (nếu chỉ cần test hệ thống):
+   ```bash
+   # Hệ thống vẫn hoạt động mà không có chaincode
+   docker compose up -d
+   bash scripts/setup.sh --create-admin
+   # Vào http://localhost:9999 để test
+   ```
+
+5. **Xem chi tiết troubleshooting:** Phần 9.8 bên dưới
+
+### ✅ Checklist Trước Khi Bắt Đầu
+
+- [ ] Docker và Docker Compose đã cài đặt
+- [ ] User đã được thêm vào `docker` group (không cần sudo)
+- [ ] Đã kiểm tra `docker ps` chạy được
+- [ ] (WSL2) Đã đọc phần cảnh báo về WSL2 ở trên
+
 ## 📋 1. Chuẩn Bị Môi Trường
 
 Đảm bảo bạn đang ở thư mục gốc của dự án:
@@ -251,6 +294,16 @@ ibnchannel
 
 Hướng dẫn deploy chaincode **teaTraceCC** (Node.js/TypeScript) lên network IBN.
 
+> ⚠️ **CẢNH BÁO QUAN TRỌNG CHO WSL2 USERS:**
+> 
+> Nếu bạn đang dùng **WSL2 (Windows Subsystem for Linux)**, có thể gặp lỗi `write unix @->/run/docker.sock: write: broken pipe` khi install chaincode. Đây là limitation đã biết của WSL2 với Docker-in-Docker.
+> 
+> **Giải pháp nhanh:**
+> 1. **Pre-pull builder images** trước khi install (xem bước 9.3.1)
+> 2. **Restart Docker Desktop** và tăng resources
+> 3. Nếu vẫn lỗi, xem phần **9.8 - Troubleshooting** để có các workaround chi tiết
+> 4. **Khuyến nghị:** Deploy trên Linux native để tránh hoàn toàn vấn đề này
+
 ### 9.1. Build Chaincode
 
 Trước tiên, cần build chaincode từ source code:
@@ -352,8 +405,28 @@ Cài đặt chaincode trên tất cả các peers:
 
 **⚠️ LƯU Ý QUAN TRỌNG:** 
 - Quá trình install có thể mất **2-5 phút** cho mỗi peer (do build Docker image)
-- Nếu gặp lỗi "broken pipe", đây thường là lỗi timeout - cần retry
+- Nếu gặp lỗi "broken pipe", đây thường là lỗi timeout hoặc **WSL2 Docker socket limitation** - cần retry hoặc xem phần 9.8
 - Đảm bảo Docker daemon đang chạy và có đủ resources
+
+#### 9.3.1. Pre-pull Builder Images (QUAN TRỌNG cho WSL2)
+
+**Bước này giúp tránh lỗi "broken pipe" trong WSL2** bằng cách pull builder images về host trước:
+
+```bash
+# Pull chaincode builder images về host (tránh peer phải download khi build)
+echo "📥 Pulling chaincode builder images..."
+docker pull hyperledger/fabric-nodeenv:2.5.9
+docker pull hyperledger/fabric-ccenv:2.5.9
+
+# Kiểm tra images đã có
+echo "✅ Builder images ready:"
+docker images | grep -E "(fabric-nodeenv|fabric-ccenv)"
+echo ""
+```
+
+**Sau khi pull xong, tiếp tục với các bước bên dưới.**
+
+#### 9.3.2. Install Chaincode
 
 ```bash
 # Kiểm tra package file tồn tại
@@ -610,12 +683,92 @@ docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
 Nếu gặp lỗi `write unix @->/run/docker.sock: write: broken pipe` khi install chaincode:
 
 **Nguyên nhân chính:**
-- **Timeout trong quá trình build Docker image** (phổ biến nhất)
+- **WSL2 Docker socket limitation** (phổ biến nhất trong WSL2)
+- **Timeout trong quá trình build Docker image**
 - Docker daemon bị disconnect hoặc quá tải
 - Chaincode package thiếu file quan trọng (package.json, package-lock.json)
 - Peer container không có đủ resources để build image
 
+**⚠️ QUAN TRỌNG: Nếu bạn đang dùng WSL2, hãy đọc phần "Giải pháp đặc biệt cho WSL2" trước!**
+
 **Giải pháp theo thứ tự ưu tiên:**
+
+#### 0. **🔴 GIẢI PHÁP ĐẶC BIỆT CHO WSL2 (ĐỌC TRƯỚC)**
+
+Nếu bạn đang dùng **WSL2 (Windows Subsystem for Linux)**, lỗi "broken pipe" thường do **WSL2 Docker socket limitation**. Đây là vấn đề đã biết của WSL2 với Docker-in-Docker.
+
+**Workaround 1: Pre-pull Builder Images (Thử ngay)**
+
+Pull các builder images về host trước khi install để peer không phải download:
+
+```bash
+# Pull chaincode builder images về host
+docker pull hyperledger/fabric-nodeenv:2.5.9
+docker pull hyperledger/fabric-ccenv:2.5.9
+
+# Kiểm tra images đã có
+docker images | grep -E "(fabric-nodeenv|fabric-ccenv)"
+
+# Sau đó thử install lại chaincode
+# (Chạy lại bước 9.3)
+```
+
+**Workaround 2: Restart Docker Desktop (Windows)**
+
+Nếu đang dùng Docker Desktop trên Windows:
+
+```bash
+# 1. Mở Docker Desktop
+# 2. Click Settings → General
+# 3. Bật "Use the WSL 2 based engine" (nếu chưa bật)
+# 4. Click "Apply & Restart"
+# 5. Đợi Docker Desktop khởi động lại xong
+# 6. Thử install chaincode lại
+```
+
+**Workaround 3: Tăng Docker Resources (Windows)**
+
+Trong Docker Desktop:
+1. Settings → Resources → Advanced
+2. Tăng **Memory** lên ít nhất **4GB** (khuyến nghị 8GB)
+3. Tăng **CPUs** lên ít nhất **2** (khuyến nghị 4)
+4. Click "Apply & Restart"
+5. Thử install lại
+
+**Workaround 4: Skip Chaincode Tạm Thời (Nếu cần test hệ thống)**
+
+Nếu chaincode không deploy được nhưng bạn cần test các phần khác của hệ thống:
+
+```bash
+# Hệ thống vẫn hoạt động được mà không có chaincode:
+# ✅ Backend API: Hoạt động
+# ✅ Frontend Dashboard: Hoạt động  
+# ✅ Authentication: Hoạt động
+# ✅ Database: Hoạt động
+# ❌ Blockchain transactions: Không hoạt động (cần chaincode)
+
+# Để test admin login và dashboard:
+docker compose up -d
+bash scripts/setup.sh --create-admin
+
+# Sau đó vào http://localhost:9999 để test
+```
+
+**Workaround 5: Deploy trên Linux Native (Khuyến nghị cho Production)**
+
+Nếu có Ubuntu VM hoặc máy Linux thật, deploy trên đó sẽ không gặp vấn đề WSL2:
+
+```bash
+# Clone project sang Linux native
+git clone <repo> && cd <project>
+bash scripts/setup.sh --fresh
+```
+
+**Workaround 6: Sử dụng External Chaincode (Nâng cao)**
+
+Nếu các workaround trên không work, có thể chuyển sang External Chaincode mode (chaincode chạy như service riêng, không cần Docker build trong peer). Xem phần 9.9 bên dưới.
+
+---
 
 #### 1. **Retry với timeout dài hơn (Thử ngay)**
 Hướng dẫn đã có retry mechanism tự động (3 lần), nhưng nếu vẫn fail:
@@ -753,7 +906,88 @@ cd ../..
 ```
 
 **Lưu ý quan trọng:**
-- Lỗi "broken pipe" thường xảy ra do **timeout** trong quá trình build Docker image
+- Lỗi "broken pipe" thường xảy ra do **WSL2 Docker socket limitation** hoặc **timeout** trong quá trình build Docker image
 - Quá trình install có thể mất **2-5 phút** cho mỗi peer
 - Hướng dẫn đã có **retry mechanism tự động** (3 lần với timeout 5 phút mỗi lần)
-- Nếu vẫn fail sau 3 lần retry, kiểm tra Docker resources và logs
+- Nếu vẫn fail sau 3 lần retry, thử các workaround cho WSL2 ở trên
+- **Khuyến nghị:** Nếu có thể, deploy trên Linux native để tránh hoàn toàn vấn đề WSL2
+
+---
+
+### 9.9. External Chaincode (Workaround Nâng Cao)
+
+Nếu tất cả các giải pháp trên không work và bạn vẫn cần chaincode hoạt động, có thể chuyển sang **External Chaincode** mode. External Chaincode chạy như một service riêng, không cần Docker build trong peer.
+
+**⚠️ Lưu ý:** External Chaincode phức tạp hơn và cần sửa đổi chaincode code. Chỉ dùng khi thực sự cần thiết.
+
+**Bước 1: Sửa chaincode để chạy như gRPC server**
+
+Chaincode cần được sửa để expose gRPC endpoint. Xem tài liệu Hyperledger Fabric về External Chaincode.
+
+**Bước 2: Tạo connection.json**
+
+```bash
+# Tạo file connection.json trong chaincode directory
+cat > chaincode/teaTraceCC/connection.json <<EOF
+{
+  "address": "chaincode-teaTraceCC:9999",
+  "dial_timeout": "10s",
+  "tls_required": false
+}
+EOF
+```
+
+**Bước 3: Package với connection.json**
+
+```bash
+# Package chaincode với connection.json thay vì code
+docker exec -e CORE_PEER_LOCALMSPID="Org1MSP" \
+  -e CORE_PEER_TLS_ENABLED=true \
+  -e CORE_PEER_TLS_ROOTCERT_FILE="/etc/hyperledger/fabric/tls/ca.crt" \
+  -e CORE_PEER_MSPCONFIGPATH="/tmp/admin_msp" \
+  -w /opt/chaincode \
+  peer0.org1.ibn.vn \
+  peer lifecycle chaincode package teaTraceCC_external.tar.gz \
+  --path /opt/chaincode/teaTraceCC \
+  --lang external \
+  --label teaTraceCC_1.0
+```
+
+**Bước 4: Deploy chaincode service**
+
+Thêm service vào `docker-compose.yml`:
+
+```yaml
+chaincode-teaTraceCC:
+  container_name: chaincode-teaTraceCC
+  image: node:18-alpine
+  working_dir: /app
+  command: sh -c "npm install && node dist/index.js"
+  environment:
+    - CHAINCODE_ID=teaTraceCC_1.0:latest
+    - CHAINCODE_SERVER_ADDRESS=0.0.0.0:9999
+  volumes:
+    - ./chaincode/teaTraceCC/dist:/app
+  networks:
+    - ibn-network
+  restart: unless-stopped
+```
+
+**Bước 5: Install và approve như bình thường**
+
+Sau khi chaincode service chạy, install và approve như các bước 9.3-9.5.
+
+**⚠️ Lưu ý:** External Chaincode cần chaincode code được sửa để hỗ trợ gRPC server mode. Đây là giải pháp nâng cao, chỉ dùng khi thực sự cần thiết.
+
+---
+
+### 9.10. Tóm Tắt Các Giải Pháp
+
+| Giải pháp | Độ khó | Thời gian | Khuyến nghị |
+|-----------|--------|-----------|-------------|
+| Pre-pull builder images | Dễ | 5 phút | ✅ Thử đầu tiên |
+| Restart Docker Desktop | Dễ | 2 phút | ✅ Thử thứ hai |
+| Tăng Docker resources | Dễ | 5 phút | ✅ Thử thứ ba |
+| Skip chaincode tạm thời | Dễ | 0 phút | ✅ Nếu chỉ cần test hệ thống |
+| Deploy trên Linux native | Trung bình | 30 phút | ✅✅ Khuyến nghị cho production |
+| External Chaincode | Khó | 1-2 giờ | ⚠️ Chỉ khi thực sự cần |
