@@ -168,13 +168,13 @@ Returns health status of all services.
 
 **GET** `/ready`
 
-Kubernetes readiness probe.
+Service readiness probe.
 
 #### Liveness Check
 
 **GET** `/live`
 
-Kubernetes liveness probe.
+Service liveness probe.
 
 #### Metrics
 

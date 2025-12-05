@@ -3,7 +3,7 @@
 Production-ready API Gateway for Hyperledger Fabric IBN Network - Tea Traceability System
 
 [![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8?style=flat&logo=go)](https://golang.org)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
 ## Features
 
@@ -17,26 +17,26 @@ Production-ready API Gateway for Hyperledger Fabric IBN Network - Tea Traceabili
 - ✅ OpenAPI/Swagger documentation
 - ✅ Graceful shutdown with 30s timeout
 - ✅ Nginx load balancer (3 instances)
-- ✅ Docker & Kubernetes ready
+- ✅ Docker ready
 - ✅ Structured logging with zap
 - ✅ Configuration validation with Viper
 
 ## Technology Stack
 
-| Component | Technology | Version |
-|-----------|------------|---------|
-| **Language** | Go | 1.21+ |
-| **Web Framework** | Chi Router | v5 |
-| **Database** | PostgreSQL + pgx + sqlc | 16 |
-| **Migrations** | golang-migrate | v4 |
-| **Cache** | Redis | 7 |
-| **Blockchain** | Hyperledger Fabric | 2.5 |
-| **Load Balancer** | Nginx | latest |
-| **Config** | Viper + Validator | latest |
-| **Logging** | zap | latest |
-| **Tracing** | OpenTelemetry | latest |
-| **Resilience** | gobreaker | latest |
-| **Monitoring** | Prometheus + Grafana | latest |
+| Component             | Technology                | Version |
+|-----------------------|---------------------------|---------|
+| **Language**          | Go                        | 1.21+   |
+| **Web Framework**     | Chi Router                | v5      |
+| **Database**          | PostgreSQL + pgx + sqlc   | 16      |
+| **Migrations**        | golang-migrate            | v4      |
+| **Cache**             | Redis                     | 7       |
+| **Blockchain**        | Hyperledger Fabric        | 2.5     |
+| **Load Balancer**     | Nginx                     | latest  |
+| **Config**            | Viper + Validator         | latest  |
+| **Logging**           | zap                       | latest  |
+| **Tracing**           | OpenTelemetry             | latest  |
+| **Resilience**        | gobreaker                 | latest  |
+| **Monitoring**        | Prometheus + Grafana      | latest  |
 
 ## Quick Start
 
@@ -109,22 +109,22 @@ Access the API:
 
 ### Batch Operations
 
-| Method | Endpoint | Description | Auth Required |
-|--------|----------|-------------|---------------|
-| POST | `/api/v1/batches` | Create new tea batch | ✅ Farmer |
-| GET | `/api/v1/batches/:id` | Get batch info | ❌ Public |
-| POST | `/api/v1/batches/:id/verify` | Verify batch hash | ✅ Farmer/Verifier/Admin |
-| PATCH | `/api/v1/batches/:id/status` | Update batch status | ✅ Farmer/Admin |
+| Method | Endpoint                       | Description             | Auth Required             |
+|--------|--------------------------------|-------------------------|---------------------------|
+| POST   | `/api/v1/batches`              | Create new tea batch    | ✅ Farmer                 |
+| GET    | `/api/v1/batches/:id`          | Get batch info          | ❌ Public                 |
+| POST   | `/api/v1/batches/:id/verify`   | Verify batch hash       | ✅ Farmer/Verifier/Admin  |
+| PATCH  | `/api/v1/batches/:id/status`   | Update batch status     | ✅ Farmer/Admin           |
 
 ### Health & Monitoring
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/health` | Health check (all services) |
-| GET | `/ready` | Readiness check (K8s) |
-| GET | `/live` | Liveness check (K8s) |
-| GET | `/metrics` | Prometheus metrics |
-| GET | `/swagger/*` | Swagger documentation |
+| Method | Endpoint     | Description                 |
+|--------|--------------|-----------------------------|
+| GET    | `/health`    | Health check (all services) |
+| GET    | `/ready`     | Readiness check             |
+| GET    | `/live`      | Liveness check              |
+| GET    | `/metrics`   | Prometheus metrics          |
+| GET    | `/swagger/*` | Swagger documentation       |
 
 ## Configuration
 
@@ -307,12 +307,12 @@ Redis-based sliding window rate limiting:
 
 Blockchain operations require specific MSP roles:
 
-| Operation | Allowed MSPs |
-|-----------|--------------|
-| Create Batch | Org1MSP (Farmer) |
-| Verify Batch | Org1MSP, Org2MSP, Org3MSP |
-| Get Batch Info | Public |
-| Update Status | Org1MSP (Farmer), Org3MSP (Admin) |
+| Operation       | Allowed MSPs                      |
+|-----------------|-----------------------------------|
+| Create Batch    | Org1MSP (Farmer)                  |
+| Verify Batch    | Org1MSP, Org2MSP, Org3MSP         |
+| Get Batch Info  | Public                            |
+| Update Status   | Org1MSP (Farmer), Org3MSP (Admin) |
 
 ### TLS Configuration
 

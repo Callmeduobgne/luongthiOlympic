@@ -25,118 +25,118 @@ API Gateway là lớp trung gian giữa **Frontend/Backend** và **Hyperledger F
 ### System Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                         CLIENT LAYER                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐           │
-│  │   Frontend    │  │    Backend    │  │  External    │           │
+┌────────────────────────────────────────────────────────────────────┐
+│                         CLIENT LAYER                               │
+│  ┌───────────────┐  ┌───────────────┐  ┌───────────────┐           │
+│  │   Frontend    │  │    Backend    │  │  External     │           │
 │  │   (React)     │  │   (Go API)    │  │   Services    │           │
 │  └──────┬────────┘  └──────┬────────┘  └──────┬────────┘           │
-│         │                  │                   │                    │
+│         │                  │                  │                    │
 │         └──────────────────┼──────────────────┘                    │
-│                            │                                        │
-│                            ▼                                        │
-└─────────────────────────────────────────────────────────────────────┘
+│                            │                                       │
+│                            ▼                                       │
+└────────────────────────────────────────────────────────────────────┘
                             │
                             │ HTTP/HTTPS
                             │ WebSocket
                             ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                      API GATEWAY LAYER                               │
-│                      (Port 8080)                                    │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    NGINX PROXY                                │ │
-│  │  - SSL/TLS Termination                                        │ │
-│  │  - Load Balancing                                              │ │
-│  │  - CORS Handling                                               │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+┌────────────────────────────────────────────────────────────────────┐
+│                      API GATEWAY LAYER                             │
+│                      (Port 8080)                                   │
+├────────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    NGINX PROXY                              │   │
+│  │  - SSL/TLS Termination                                      │   │
+│  │  - Load Balancing                                           │   │
+│  │  - CORS Handling                                            │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 │                          ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │              HTTP SERVER (Chi Router)                        │ │
-│  │  - Request Routing                                            │ │
-│  │  - Middleware Stack                                           │ │
-│  │  - Swagger Documentation                                      │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │              HTTP SERVER (Chi Router)                       │   │
+│  │  - Request Routing                                          │   │
+│  │  - Middleware Stack                                         │   │
+│  │  - Swagger Documentation                                    │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 │                          ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │              MIDDLEWARE STACK                                │ │
-│  │  1. Recovery (Panic Handler)                                │ │
-│  │  2. Logger (Request Logging)                                  │ │
-│  │  3. Tracing (Request ID)                                      │ │
-│  │  4. Compression (Gzip)                                        │ │
-│  │  5. Audit (Request Audit Log)                                 │ │
-│  │  6. Authentication (JWT/API Key)                              │ │
-│  │  7. Rate Limiting (Redis-based)                               │ │
-│  │  8. ACL (Permission Check)                                     │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │              MIDDLEWARE STACK                               │   │
+│  │  1. Recovery (Panic Handler)                                │   │
+│  │  2. Logger (Request Logging)                                │   │
+│  │  3. Tracing (Request ID)                                    │   │
+│  │  4. Compression (Gzip)                                      │   │
+│  │  5. Audit (Request Audit Log)                               │   │
+│  │  6. Authentication (JWT/API Key)                            │   │
+│  │  7. Rate Limiting (Redis-based)                             │   │
+│  │  8. ACL (Permission Check)                                  │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 │                          ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    HANDLERS LAYER                            │ │
-│  │  - AuthHandler      - BatchHandler                            │ │
-│  │  - ChaincodeHandler - ChannelHandler                         │ │
-│  │  - NetworkHandler   - TransactionHandler                     │ │
-│  │  - EventHandler     - ExplorerHandler                        │ │
-│  │  - MetricsHandler   - AuditHandler                           │ │
-│  │  - ACLHandler       - UserHandler                            │ │
-│  │  - DashboardHandler (WebSocket)                              │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    HANDLERS LAYER                           │   │
+│  │  - AuthHandler      - BatchHandler                          │   │
+│  │  - ChaincodeHandler - ChannelHandler                        │   │
+│  │  - NetworkHandler   - TransactionHandler                    │   │
+│  │  - EventHandler     - ExplorerHandler                       │   │
+│  │  - MetricsHandler   - AuditHandler                          │   │
+│  │  - ACLHandler       - UserHandler                           │   │
+│  │  - DashboardHandler (WebSocket)                             │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 │                          ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │                    SERVICES LAYER                            │ │
-│  │  - AuthService      - BatchService                            │ │
-│  │  - ChaincodeService - ChannelService                         │ │
-│  │  - NetworkService   - TransactionService                     │ │
-│  │  - EventService     - ExplorerService                        │ │
-│  │  - MetricsService   - AuditService                           │ │
-│  │  - ACLService       - CAService                               │ │
-│  │  - IndexerService   - DiscoveryService                       │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │                    SERVICES LAYER                           │   │
+│  │  - AuthService      - BatchService                          │   │
+│  │  - ChaincodeService - ChannelService                        │   │
+│  │  - NetworkService   - TransactionService                    │   │
+│  │  - EventService     - ExplorerService                       │   │
+│  │  - MetricsService   - AuditService                          │   │
+│  │  - ACLService       - CAService                             │   │
+│  │  - IndexerService   - DiscoveryService                      │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 │                          ▼                                         │
-│  ┌─────────────────────────────────────────────────────────────┐ │
-│  │              FABRIC GATEWAY SDK                              │ │
-│  │  - Gateway Client Connection                                  │ │
-│  │  - Network & Channel Management                              │ │
-│  │  - Contract Invocation                                        │ │
-│  │  - Event Streaming                                            │ │
-│  └───────────────────────┬───────────────────────────────────────┘ │
+│  ┌─────────────────────────────────────────────────────────────┐   │
+│  │              FABRIC GATEWAY SDK                             │   │
+│  │  - Gateway Client Connection                                │   │
+│  │  - Network & Channel Management                             │   │
+│  │  - Contract Invocation                                      │   │
+│  │  - Event Streaming                                          │   │
+│  └───────────────────────┬─────────────────────────────────────┘   │
 │                          │                                         │
 └──────────────────────────┼─────────────────────────────────────────┘
                            │
                            │ gRPC/TLS
                            │
                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    DATA LAYER                                        │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────────┐  ┌──────────────────┐                      │
-│  │   PostgreSQL     │  │      Redis       │                      │
-│  │   - Users         │  │   - Rate Limit   │                      │
-│  │   - Transactions  │  │   - Cache        │                      │
-│  │   - Audit Logs    │  │   - Sessions     │                      │
-│  │   - ACL Policies  │  │                  │                      │
-│  │   - Events        │  │                  │                      │
-│  └──────────────────┘  └──────────────────┘                      │
-└─────────────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────────┐
+│                    DATA LAYER                                      │
+├────────────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐  ┌──────────────────┐                        │
+│  │   PostgreSQL     │  │      Redis       │                        │
+│  │   - Users        │  │   - Rate Limit   │                        │
+│  │   - Transactions │  │   - Cache        │                        │
+│  │   - Audit Logs   │  │   - Sessions     │                        │
+│  │   - ACL Policies │  │                  │                        │
+│  │   - Events       │  │                  │                        │
+│  └──────────────────┘  └──────────────────┘                        │
+└────────────────────────────────────────────────────────────────────┘
                            │
                            ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│              HYPERLEDGER FABRIC NETWORK                              │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐            │
-│  │   Orderers    │  │    Peers     │  │  Fabric CA   │            │
-│  │  (3 nodes)    │  │  (3 nodes)   │  │  (1 node)    │            │
-│  └──────────────┘  └──────────────┘  └──────────────┘            │
+┌────────────────────────────────────────────────────────────────────┐
+│              HYPERLEDGER FABRIC NETWORK                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐              │
+│  │   Orderers   │  │    Peers     │  │  Fabric CA   │              │
+│  │  (3 nodes)   │  │  (3 nodes)   │  │  (1 node)    │              │
+│  └──────────────┘  └──────────────┘  └──────────────┘              │
 │         │                │                    │                    │
 │         └────────────────┼────────────────────┘                    │
-│                          │                                        │
-│                    Channel: ibnchannel                            │
-│                    Chaincode: teaTraceCC v1.1.0                   │
-└─────────────────────────────────────────────────────────────────────┘
+│                          │                                         │
+│                    Channel: ibnchannel                             │
+│                    Chaincode: teaTraceCC v1.1.0                    │
+└────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -245,8 +245,8 @@ Client Request
     ▼
 ┌─────────────────────────────────────┐
 │  NGINX Proxy (Port 80/443)          │
-│  - SSL Termination                   │
-│  - CORS Headers                      │
+│  - SSL Termination                  │
+│  - CORS Headers                     │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -258,12 +258,12 @@ Client Request
                ▼
 ┌─────────────────────────────────────┐
 │  MIDDLEWARE STACK                   │
-│  1. Recovery → Catch panics          │
+│  1. Recovery → Catch panics         │
 │  2. Logger → Log request            │
-│  3. Tracing → Add Request ID       │
-│  4. Compression → Gzip (skip WS)   │
+│  3. Tracing → Add Request ID        │
+│  4. Compression → Gzip (skip WS)    │
 │  5. Audit → Log to DB               │
-│  6. Auth → Validate JWT/API Key    │
+│  6. Auth → Validate JWT/API Key     │
 │  7. Rate Limit → Check Redis        │
 │  8. ACL → Check permissions         │
 └──────────────┬──────────────────────┘
@@ -271,15 +271,15 @@ Client Request
                ▼
 ┌─────────────────────────────────────┐
 │  ChaincodeHandler.Invoke()          │
-│  - Parse request body                │
-│  - Validate parameters               │
+│  - Parse request body               │
+│  - Validate parameters              │
 └──────────────┬──────────────────────┘
                │
                ▼
 ┌─────────────────────────────────────┐
-│  ChaincodeService.Invoke()           │
+│  ChaincodeService.Invoke()          │
 │  - Prepare transaction proposal     │
-│  - Endorse with peers                │
+│  - Endorse with peers               │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -293,11 +293,11 @@ Client Request
                │ gRPC/TLS
                ▼
 ┌─────────────────────────────────────┐
-│  Hyperledger Fabric Network        │
-│  - Peer0: Endorse                  │
+│  Hyperledger Fabric Network         │
+│  - Peer0: Endorse                   │
 │  - Peer1: Endorse                   │
 │  - Peer2: Endorse                   │
-│  - Orderer: Order & Commit         │
+│  - Orderer: Order & Commit          │
 └──────────────┬──────────────────────┘
                │
                │ Transaction ID
@@ -305,7 +305,7 @@ Client Request
 ┌─────────────────────────────────────┐
 │  Response                           │
 │  {                                  │
-│    "transactionId": "tx123...",    │
+│    "transactionId": "tx123...",     │
 │    "status": "committed"            │
 │  }                                  │
 └─────────────────────────────────────┘
@@ -322,7 +322,7 @@ Client WebSocket Connection
     ▼
 ┌─────────────────────────────────────┐
 │  NGINX Proxy                        │
-│  - WebSocket Upgrade                 │
+│  - WebSocket Upgrade                │
 └──────────────┬──────────────────────┘
                │
                ▼
@@ -345,7 +345,7 @@ Client WebSocket Connection
 ┌─────────────────────────────────────┐
 │  WebSocket Service                  │
 │  - Subscribe to metrics             │
-│  - Subscribe to blocks               │
+│  - Subscribe to blocks              │
 │  - Subscribe to network info        │
 │  - Send updates every 5s            │
 └─────────────────────────────────────┘

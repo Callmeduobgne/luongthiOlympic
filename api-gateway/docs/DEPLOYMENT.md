@@ -171,7 +171,6 @@ upstream api_gateway_backend {
     server gateway1:8080;
     server gateway2:8080;
     server gateway3:8080;
-    server gateway4:8080;
 }
 ```
 
