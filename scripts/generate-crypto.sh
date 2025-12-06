@@ -148,6 +148,8 @@ EOF
 generate_genesis_block() {
     log_step "Generating genesis block"
     
+    rm -rf core/system-genesis-block/*
+
     # Check if configtx.yaml exists
     if [ ! -f "${CORE_DIR}/configtx/configtx.yaml" ]; then
         log_error "configtx.yaml not found at ${CORE_DIR}/configtx/configtx.yaml"
@@ -162,7 +164,7 @@ generate_genesis_block() {
         -v "${CORE_DIR}:/fabric" \
         -w /fabric/configtx \
         hyperledger/fabric-tools:2.5.9 \
-        configtxgen -profile RaftOrdererGenesis \
+        configtxgen -configPath /fabric/configtx -profile RaftOrdererGenesis \
             -channelID system-channel \
             -outputBlock /fabric/system-genesis-block/genesis.block
     
@@ -173,6 +175,8 @@ generate_genesis_block() {
 generate_channel_artifacts() {
     log_step "Generating channel artifacts"
     
+    rm -rf core/channel-artifacts/*
+
     # Create output directory
     mkdir -p "${CORE_DIR}/channel-artifacts"
     
@@ -182,7 +186,7 @@ generate_channel_artifacts() {
         -v "${CORE_DIR}:/fabric" \
         -w /fabric/configtx \
         hyperledger/fabric-tools:2.5.9 \
-        configtxgen -profile ThreePeersChannel \
+        configtxgen -configPath /fabric/configtx -profile ThreePeersChannel \
             -channelID ibnchannel \
             -outputCreateChannelTx /fabric/channel-artifacts/ibnchannel.tx
     
@@ -192,7 +196,7 @@ generate_channel_artifacts() {
         -v "${CORE_DIR}:/fabric" \
         -w /fabric/configtx \
         hyperledger/fabric-tools:2.5.9 \
-        configtxgen -profile ThreePeersChannel \
+        configtxgen -configPath /fabric/configtx -profile ThreePeersChannel \
             -channelID ibnchannel \
             -outputAnchorPeersUpdate /fabric/channel-artifacts/Org1MSPanchors.tx \
             -asOrg Org1MSP
@@ -203,7 +207,7 @@ generate_channel_artifacts() {
         -v "${CORE_DIR}:/fabric" \
         -w /fabric/configtx \
         hyperledger/fabric-tools:2.5.9 \
-        configtxgen -profile ThreePeersChannel \
+        configtxgen -configPath /fabric/configtx -profile ThreePeersChannel \
             -channelID ibnchannel \
             -outputBlock /fabric/channel-artifacts/ibnchannel.block
     
@@ -301,6 +305,7 @@ print_summary() {
     echo -e "  4. Deploy chaincode:   ./scripts/deploy-chaincode-ccaas.sh"
     echo ""
 }
+
 
 # Main execution
 main() {

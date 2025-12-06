@@ -190,6 +190,27 @@ Profiles:
                 - *Org1
             Capabilities:
                 <<: *ApplicationCapabilities
+        Orderer:
+            <<: *OrdererDefaults
+            OrdererType: etcdraft
+            EtcdRaft:
+                Consenters:
+                    - Host: orderer.ibn.vn
+                      Port: 7050
+                      ClientTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls/server.crt
+                      ServerTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer.ibn.vn/tls/server.crt
+                    - Host: orderer1.ibn.vn
+                      Port: 8050
+                      ClientTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/tls/server.crt
+                      ServerTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer1.ibn.vn/tls/server.crt
+                    - Host: orderer2.ibn.vn
+                      Port: 9050
+                      ClientTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/tls/server.crt
+                      ServerTLSCert: ../organizations/ordererOrganizations/ibn.vn/orderers/orderer2.ibn.vn/tls/server.crt
+            Organizations:
+                - *OrdererOrg
+            Capabilities:
+                <<: *OrdererCapabilities
 
 
 

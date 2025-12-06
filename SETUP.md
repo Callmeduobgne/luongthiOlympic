@@ -139,11 +139,8 @@ ibn-docker-packaging/
 ### Sử dụng Script Tự Động (Khuyến nghị)
 
 ```bash
-# Cấp quyền thực thi
-chmod +x scripts/generate-crypto.sh
-
 # Chạy script
-./scripts/generate-crypto.sh
+sudo ./scripts/generate-crypto.sh
 ```
 
 Script sẽ tự động:
@@ -169,7 +166,10 @@ docker pull hyperledger/fabric-tools:2.5.9
 cd ibn-docker-packaging
 
 # Xóa crypto cũ nếu có (CHỈ KHI MUỐN TẠO LẠI TỪ ĐẦU)
-# rm -rf core/organizations/*
+sudo rm -rf core/organizations/*
+sudo rm -rf core/channel-artifacts/*
+sudo rm -rf core/system-genesis-block/*
+sudo rm -rf core/fabric-ca/*
 
 # Tạo crypto materials bằng cryptogen
 docker run --rm \
@@ -320,9 +320,9 @@ core/channel-artifacts/
 
 ```bash
 # Cấp quyền đọc cho tất cả certificates
-chmod -R 755 core/organizations/
-chmod -R 755 core/channel-artifacts/
-chmod -R 755 core/system-genesis-block/
+chmod -R 777 core/organizations/
+chmod -R 777 core/channel-artifacts/
+chmod -R 777 core/system-genesis-block/
 ```
 
 ### 4.7. Kiểm tra cuối cùng
