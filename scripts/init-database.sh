@@ -45,67 +45,7 @@ done
 log_success "PostgreSQL is ready"
 
 # Create public schema tables (Backend uses public schema)
-log_info "Creating public schema tables..."
-
-docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} << 'EOSQL'
--- Users table
-CREATE TABLE IF NOT EXISTS public.users (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email VARCHAR(255) UNIQUE NOT NULL,
-    username VARCHAR(100) UNIQUE,
-    password_hash VARCHAR(255) NOT NULL,
-    full_name VARCHAR(255),
-    role VARCHAR(50) NOT NULL DEFAULT 'user',
-    msp_id VARCHAR(100),
-    is_active BOOLEAN DEFAULT TRUE,
-    email_verified BOOLEAN DEFAULT FALSE,
-    avatar_url VARCHAR(500),
-    last_login_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
-);
-
--- Refresh tokens table
-CREATE TABLE IF NOT EXISTS public.refresh_tokens (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    token_hash VARCHAR(255) UNIQUE NOT NULL,
-    device_info TEXT,
-    ip_address INET,
-    is_revoked BOOLEAN DEFAULT FALSE,
-    expires_at TIMESTAMPTZ NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    revoked_at TIMESTAMPTZ
-);
-
--- API keys table
-CREATE TABLE IF NOT EXISTS public.api_keys (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
-    key_hash VARCHAR(255) UNIQUE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    description TEXT,
-    permissions JSONB,
-    is_active BOOLEAN DEFAULT TRUE,
-    last_used_at TIMESTAMPTZ,
-    expires_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    deleted_at TIMESTAMPTZ
-);
-
--- Indexes
-CREATE INDEX IF NOT EXISTS idx_users_email ON public.users(email) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_users_role ON public.users(role) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_users_username ON public.users(username) WHERE deleted_at IS NULL;
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_user_id ON public.refresh_tokens(user_id);
-CREATE INDEX IF NOT EXISTS idx_refresh_tokens_token_hash ON public.refresh_tokens(token_hash);
-CREATE INDEX IF NOT EXISTS idx_api_keys_user_id ON public.api_keys(user_id) WHERE deleted_at IS NULL;
-
-EOSQL
-
-log_success "Public schema tables created"
+# Update: Switched to using migrations source of truth. Manual table creation removed.
 
 # Run auth schema migrations
 log_info "Running auth schema migrations..."
@@ -122,7 +62,7 @@ log_success "Migrations completed"
 
 # Check if admin user exists
 log_info "Checking for existing admin user..."
-ADMIN_EXISTS=$(docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM public.users WHERE email='${ADMIN_EMAIL}';")
+ADMIN_EXISTS=$(docker exec ${DB_CONTAINER} psql -U ${DB_USER} -d ${DB_NAME} -tAc "SELECT COUNT(*) FROM auth.users WHERE email='${ADMIN_EMAIL}';")
 
 if [ "$ADMIN_EXISTS" -eq "0" ]; then
     log_info "Creating admin user via API..."
