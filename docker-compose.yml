@@ -563,8 +563,8 @@ services:
       FABRIC_MSP_ID: Org1MSP
       FABRIC_CRYPTO_PATH: /fabric/organizations
       FABRIC_CERT_PATH: /fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/signcerts/Admin@org1.ibn.vn-cert.pem
-      FABRIC_KEY_PATH: ''
-      FABRIC_TLS_CERT_PATH: ''
+      FABRIC_KEY_PATH: '/fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp/keystore/priv_sk'
+      FABRIC_TLS_CERT_PATH: '/fabric/organizations/peerOrganizations/org1.ibn.vn/tlsca/tlsca.org1.ibn.vn-cert.pem'
       FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
       FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
       FABRIC_CHANNEL_NAME: ibnchannel
