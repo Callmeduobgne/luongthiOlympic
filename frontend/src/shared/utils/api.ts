@@ -30,7 +30,7 @@
 
 import axios from 'axios'
 import { authService } from '@features/authentication/services/authService'
-import { API_CONFIG } from '@shared/config/api.config'
+import { API_CONFIG, API_ENDPOINTS } from '@shared/config/api.config'
 
 const api = axios.create({
   baseURL: API_CONFIG.BASE_URL,
@@ -46,7 +46,7 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
-    
+
     // Dev mode: Log all requests
     if (import.meta.env.DEV) {
       console.log('🌐 [DEV] API Request:', {
@@ -56,7 +56,7 @@ api.interceptors.request.use(
         headers: { ...config.headers, Authorization: token ? 'Bearer ***' : 'none' },
       })
     }
-    
+
     return config
   },
   (error) => {
@@ -95,8 +95,11 @@ api.interceptors.response.use(
     }
 
     // If 401 and not already retried and not a refresh token request
+    // ALSO: Do not try to refresh if the failed request was a login request (invalid credentials)
     const isRefreshRequest = originalRequest.url?.includes('/auth/refresh')
-    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshRequest) {
+    const isLoginRequest = originalRequest.url?.includes(API_ENDPOINTS.AUTH.LOGIN)
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isRefreshRequest && !isLoginRequest) {
       originalRequest._retry = true
 
       if (import.meta.env.DEV) {
@@ -107,11 +110,11 @@ api.interceptors.response.use(
         const newToken = await authService.refreshToken()
         if (newToken) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`
-          
+
           if (import.meta.env.DEV) {
             console.log('✅ [DEV] Token refreshed, retrying request')
           }
-          
+
           return api(originalRequest)
         } else {
           throw new Error('No token received from refresh')
@@ -125,7 +128,7 @@ api.interceptors.response.use(
         return Promise.reject(refreshError)
       }
     }
-    
+
     // If refresh token request fails, logout immediately
     if (error.response?.status === 401 && isRefreshRequest) {
       if (import.meta.env.DEV) {
