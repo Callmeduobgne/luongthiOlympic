@@ -63,6 +63,7 @@ export const API_CONFIG = {
 export const API_ENDPOINTS = {
   AUTH: {
     LOGIN: '/api/v1/auth/login',
+    REGISTER: '/api/v1/auth/register',
     REFRESH: '/api/v1/auth/refresh',
     PROFILE: '/api/v1/auth/profile',
     UPLOAD_AVATAR: '/api/v1/auth/avatar',

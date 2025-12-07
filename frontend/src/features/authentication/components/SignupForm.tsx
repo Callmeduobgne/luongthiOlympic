@@ -29,11 +29,13 @@
  */
 
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { authService } from '../services/authService'
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Tên phải có ít nhất 2 ký tự'),
@@ -48,6 +50,7 @@ const signupSchema = z.object({
 type SignupFormData = z.infer<typeof signupSchema>
 
 export const SignupForm = () => {
+  const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const {
@@ -60,9 +63,13 @@ export const SignupForm = () => {
 
   const onSubmit = async (data: SignupFormData) => {
     try {
-      // TODO: Implement signup API call
-      console.log('Signup:', data)
+      await authService.signup({
+        name: data.name,
+        email: data.email,
+        password: data.password,
+      })
       toast.success('Đăng ký thành công! Vui lòng đăng nhập.')
+      navigate('/login')
     } catch (error) {
       const axiosError = error as { response?: { data?: { message?: string } } }
       toast.error(

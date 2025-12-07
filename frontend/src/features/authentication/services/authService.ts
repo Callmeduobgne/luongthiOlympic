@@ -30,7 +30,7 @@
 
 import api from '@shared/utils/api'
 import { API_ENDPOINTS } from '@shared/config/api.config'
-import type { LoginRequest, AuthResponse } from '../types/auth.types'
+import type { LoginRequest, SignupRequest, AuthResponse } from '../types/auth.types'
 
 type WrappedAuthResponse = {
   success: boolean
@@ -48,6 +48,16 @@ const isWrappedResponse = (payload: unknown): payload is WrappedAuthResponse => 
 }
 
 export const authService = {
+  async signup(data: SignupRequest): Promise<void> {
+    const payload = {
+      email: data.email,
+      password: data.password,
+      full_name: data.name,
+      role: 'user', // Default role for public signup
+    }
+    await api.post(API_ENDPOINTS.AUTH.REGISTER, payload)
+  },
+
   async login(credentials: LoginRequest): Promise<AuthResponse> {
     // Backend expects 'email' field (not username)
     const requestBody = {
