@@ -31,16 +31,19 @@ docker compose up -d
 sleep 60
 
 # Init Database
-./scripts/init-database.sh
+sudo ./scripts/init-database.sh
 
 # Join orderers vào channel
-./scripts/join-orderers.sh
+sudo ./scripts/join-orderers.sh
+
+# Join peers vào channel
+sudo ./scripts/join-peers.sh
 
 # Deploy chaincode
-./scripts/deploy-chaincode-ccaas.sh
+sudo ./scripts/deploy-chaincode-ccaas.sh
 
 # Test chaincode
-./scripts/test-chaincode.sh
+sudo ./scripts/test-chaincode.sh
 ```
 
 ---
