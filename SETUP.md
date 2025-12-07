@@ -21,7 +21,7 @@ Nếu bạn đã quen với Hyperledger Fabric và chỉ cần các lệnh nhanh
 
 ```bash
 # Clone dự án
-git clone <repository-url> ibn-docker-packaging && cd ibn-docker-packaging
+git clone https://github.com/Callmeduobgne/luongthiOlympic.git && cd luongthiOlympic
 
 # Nếu CẦN tạo crypto materials từ đầu (chỉ khi chưa có thư mục organizations/)
 sudo ./scripts/generate-crypto.sh
@@ -29,6 +29,9 @@ sudo ./scripts/generate-crypto.sh
 # Khởi động network (Docker Compose sẽ tự tạo network)
 docker compose up -d
 sleep 60
+
+# Init Database
+./scripts/init-database.sh
 
 # Join orderers vào channel
 ./scripts/join-orderers.sh
