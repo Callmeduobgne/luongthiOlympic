@@ -87,7 +87,19 @@ sleep 2
 
 # Test 2: Query Batch
 log_test "Querying batch: ${BATCH_ID}"
-run_chaincode_query "GetBatchInfo" "[\"${BATCH_ID}\"]"
+BATCH_OUTPUT=$(run_chaincode_query "GetBatchInfo" "[\"${BATCH_ID}\"]")
+echo "$BATCH_OUTPUT"
+
+# Extract hash (simple grep/cut since jq might not be available)
+HASH_VALUE=$(echo "$BATCH_OUTPUT" | grep -o '"hashValue":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$HASH_VALUE" ]; then
+    log_error "Failed to extract hash value from batch info"
+    # Proceeding might fail, but let's try or we could exit. 
+    # For now, let's warn.
+else
+    log_info "Extracted hash value: ${HASH_VALUE}"
+fi
 
 # Test 3: Update Batch Status
 log_test "Updating batch status to VERIFIED"
@@ -97,7 +109,8 @@ sleep 2
 
 # Test 4: Verify Batch
 log_test "Verifying batch"
-run_chaincode_query "VerifyBatch" "[\"${BATCH_ID}\",\"\"]"
+# Use the extracted hash
+run_chaincode_query "VerifyBatch" "[\"${BATCH_ID}\",\"${HASH_VALUE}\"]"
 
 # Test 5: Create Package
 PACKAGE_ID="PKG-TEST-$(date +%s)"

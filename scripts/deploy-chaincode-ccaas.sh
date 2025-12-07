@@ -95,11 +95,11 @@ create_ccaas_package() {
     log_step "Creating CCaaS package"
     
     # Create temp directory
-    rm -rf /tmp/ccaas-package
-    mkdir -p /tmp/ccaas-package
+    TEMP_DIR="/tmp/ccaas-package-$(date +%s)"
+    mkdir -p "${TEMP_DIR}"
     
     # Create connection.json
-    cat > /tmp/ccaas-package/connection.json << EOF
+    cat > "${TEMP_DIR}/connection.json" << EOF
 {
   "address": "${CHAINCODE_ADDRESS}",
   "dial_timeout": "10s",
@@ -108,25 +108,32 @@ create_ccaas_package() {
 EOF
     
     # Create metadata.json - type must be "ccaas" for CCaaS
-    cat > /tmp/ccaas-package/metadata.json << EOF
+    cat > "${TEMP_DIR}/metadata.json" << EOF
 {
   "type": "ccaas",
   "label": "${CHAINCODE_LABEL}"
 }
 EOF
     
-    # Create code.tar.gz containing connection.json
-    cd /tmp/ccaas-package
-    tar czf code.tar.gz connection.json
+    # Create code.tar.gz containing connection.json and META-INF (for indexes)
+    if [ -d "${CHAINCODE_DIR}/META-INF" ]; then
+        log_info "Including META-INF (indexes) in package..."
+        cp -r "${CHAINCODE_DIR}/META-INF" "${TEMP_DIR}/"
+        cd "${TEMP_DIR}"
+        tar czf code.tar.gz connection.json META-INF
+    else
+        cd "${TEMP_DIR}"
+        tar czf code.tar.gz connection.json
+    fi
     
     # Create final package
     tar czf "${CHAINCODE_NAME}-ccaas.tar.gz" code.tar.gz metadata.json
     
     cd "${PROJECT_ROOT}"
     
-    log_success "CCaaS package created: /tmp/ccaas-package/${CHAINCODE_NAME}-ccaas.tar.gz"
+    log_success "CCaaS package created: ${TEMP_DIR}/${CHAINCODE_NAME}-ccaas.tar.gz"
     log_info "Package contents:"
-    tar -tzf "/tmp/ccaas-package/${CHAINCODE_NAME}-ccaas.tar.gz"
+    tar -tzf "${TEMP_DIR}/${CHAINCODE_NAME}-ccaas.tar.gz"
 }
 
 install_chaincode() {
@@ -134,7 +141,7 @@ install_chaincode() {
     
     # Copy package to admin-service
     log_info "Copying package to admin-service container..."
-    docker cp "/tmp/ccaas-package/${CHAINCODE_NAME}-ccaas.tar.gz" admin-service:/tmp/
+    docker cp "${TEMP_DIR}/${CHAINCODE_NAME}-ccaas.tar.gz" admin-service:/tmp/
     
     # Install via API
     log_info "Installing chaincode via admin-service API..."

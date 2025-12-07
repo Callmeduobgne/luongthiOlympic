@@ -36,9 +36,20 @@ fi
 
 # Peers to join
 PEERS=("peer0.org1.ibn.vn" "peer1.org1.ibn.vn" "peer2.org1.ibn.vn")
-
+# Cổng của peer
+# peer0.org1.ibn.vn:7051
+# peer1.org1.ibn.vn:8051
+# peer2.org1.ibn.vn:9051
 for PEER_HOST in "${PEERS[@]}"; do
-    log_info "Joining ${PEER_HOST} to channel ${CHANNEL_NAME}..."
+    # Determine port based on peer host
+    PORT=7051
+    if [[ "$PEER_HOST" == "peer1.org1.ibn.vn" ]]; then
+        PORT=8051
+    elif [[ "$PEER_HOST" == "peer2.org1.ibn.vn" ]]; then
+        PORT=9051
+    fi
+
+    log_info "Joining ${PEER_HOST} on port ${PORT} to channel ${CHANNEL_NAME}..."
     
     # Check if already joined by listing channels
     LIST_RESULT=$(docker run --rm \
@@ -48,7 +59,7 @@ for PEER_HOST in "${PEERS[@]}"; do
         -e CORE_PEER_MSPCONFIGPATH=/fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/fabric/organizations/peerOrganizations/org1.ibn.vn/peers/${PEER_HOST}/tls/ca.crt" \
-        -e CORE_PEER_ADDRESS="${PEER_HOST}:7051" \
+        -e CORE_PEER_ADDRESS="${PEER_HOST}:${PORT}" \
         hyperledger/fabric-tools:2.5.9 \
         peer channel list 2>&1)
         
@@ -65,7 +76,7 @@ for PEER_HOST in "${PEERS[@]}"; do
         -e CORE_PEER_MSPCONFIGPATH=/fabric/organizations/peerOrganizations/org1.ibn.vn/users/Admin@org1.ibn.vn/msp \
         -e CORE_PEER_TLS_ENABLED=true \
         -e CORE_PEER_TLS_ROOTCERT_FILE="/fabric/organizations/peerOrganizations/org1.ibn.vn/peers/${PEER_HOST}/tls/ca.crt" \
-        -e CORE_PEER_ADDRESS="${PEER_HOST}:7051" \
+        -e CORE_PEER_ADDRESS="${PEER_HOST}:${PORT}" \
         hyperledger/fabric-tools:2.5.9 \
         peer channel join -b "/fabric/channel-artifacts/${CHANNEL_NAME}.block" 2>&1)
         
