@@ -455,7 +455,7 @@ services:
       # Allow init script to use password from env var
     volumes:
     - postgres_data:/var/lib/postgresql/data
-    - ./backend/migrations:/docker-entrypoint-initdb.d:ro
+      # - ./backend/migrations:/docker-entrypoint-initdb.d:ro
     ports:
     - 5432:5432
     networks:
