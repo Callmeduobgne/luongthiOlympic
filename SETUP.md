@@ -299,7 +299,7 @@ docker exec peer0.org1.ibn.vn peer channel list
 | Frontend | http://localhost:9999 | Web application (User) |
 | Backend API | http://localhost:9900 | REST API |
 | Admin Service | http://localhost:9902 | Admin operations |
-| Chaiincode | External Service | Port 9999 |
+| Chaincode | External Service | Port 9999 |
 | Grafana | http://localhost:9300 | Monitoring dashboard |
 | Prometheus | http://localhost:9901 | Metrics |
 
