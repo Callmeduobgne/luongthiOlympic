@@ -356,7 +356,7 @@ docker exec ibn-backend-dev nc -zv peer0.org1.ibn.vn 7051
 
 ## 📄 License
 
-Copyright © 2024 IBN Network
+Copyright © 2025 IBN Network
 
 ## 👥 Contributors
 
@@ -373,7 +373,7 @@ IBN Development Team
 
 ## 📄 License
 
-Copyright © 2024 IBN Network
+Copyright © 2025 IBN Network
 
 ## 👥 Contributors
 

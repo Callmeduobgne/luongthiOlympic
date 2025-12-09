@@ -35,7 +35,7 @@ services:
       FABRIC_PEER_ENDPOINT: peer0.org1.ibn.vn:7051
       FABRIC_GATEWAY_PEER: peer0.org1.ibn.vn
       FABRIC_CHANNEL_NAME: ibnchannel
-      JWT_SECRET: ibn-network-secret-production-2024
+      JWT_SECRET: ibn-network-secret-production-2025
       JWT_ISSUER: ibn-network
       JWT_ACCESS_TTL: 15m
       JWT_REFRESH_TTL: 168h

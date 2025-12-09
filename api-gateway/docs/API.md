@@ -41,9 +41,9 @@ Creates a new tea batch on the blockchain.
 {
   "batchId": "BATCH001",
   "farmLocation": "Moc Chau, Son La",
-  "harvestDate": "2024-11-08",
+  "harvestDate": "2025-11-08",
   "processingInfo": "Organic processing, no pesticides",
-  "qualityCert": "VN-ORG-2024"
+  "qualityCert": "VN-ORG-2025"
 }
 ```
 
@@ -54,12 +54,12 @@ Creates a new tea batch on the blockchain.
   "data": {
     "batchId": "BATCH001",
     "farmLocation": "Moc Chau, Son La",
-    "harvestDate": "2024-11-08",
+    "harvestDate": "2025-11-08",
     "processingInfo": "Organic processing, no pesticides",
-    "qualityCert": "VN-ORG-2024",
+    "qualityCert": "VN-ORG-2025",
     "hashValue": "a1b2c3d4...",
     "owner": "Org1MSP",
-    "timestamp": "2024-11-08T10:00:00.000Z",
+    "timestamp": "2025-11-08T10:00:00.000Z",
     "status": "CREATED"
   }
 }
@@ -96,7 +96,7 @@ Verifies batch hash.
 **Request Body:**
 ```json
 {
-  "hashInput": "BATCH001|Moc Chau, Son La|2024-11-08|Organic processing|VN-ORG-2024"
+  "hashInput": "BATCH001|Moc Chau, Son La|2025-11-08|Organic processing|VN-ORG-2025"
 }
 ```
 

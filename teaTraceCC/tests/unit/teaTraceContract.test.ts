@@ -1,3 +1,19 @@
+/*
+ * Copyright 2025 IBN Network (ICTU Blockchain Network)
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 import { Context, ChaincodeStub } from 'fabric-contract-api';
 import { TeaTraceContract } from '../../src/teaTraceContract';
 import { TeaBatch, TeaBatchStatus } from '../../src/models/teaBatch';
@@ -53,9 +69,9 @@ describe('TeaTraceContract', () => {
   describe('createBatch', () => {
     const batchId = 'BATCH001';
     const farmLocation = 'Moc Chau, Son La';
-    const harvestDate = '2024-11-08';
+    const harvestDate = '2025-11-08';
     const processingInfo = 'Organic processing';
-    const qualityCert = 'VN-ORG-2024';
+    const qualityCert = 'VN-ORG-2025';
 
     it('should create a new batch successfully', async () => {
       // Arrange
@@ -104,7 +120,7 @@ describe('TeaTraceContract', () => {
         qualityCert,
         hashValue: 'hash',
         owner: 'Org1MSP',
-        timestamp: '2024-11-08T10:00:00.000Z',
+        timestamp: '2025-11-08T10:00:00.000Z',
         status: 'CREATED',
       };
       mockStub.getState.mockResolvedValue(
@@ -176,18 +192,18 @@ describe('TeaTraceContract', () => {
     const batch: TeaBatch = {
       batchId,
       farmLocation: 'Moc Chau',
-      harvestDate: '2024-11-08',
+      harvestDate: '2025-11-08',
       processingInfo: 'Organic',
-      qualityCert: 'VN-ORG-2024',
+      qualityCert: 'VN-ORG-2025',
       hashValue: generateBatchHash({
         batchId,
         farmLocation: 'Moc Chau',
-        harvestDate: '2024-11-08',
+        harvestDate: '2025-11-08',
         processingInfo: 'Organic',
-        qualityCert: 'VN-ORG-2024',
+        qualityCert: 'VN-ORG-2025',
       }),
       owner: 'Org1MSP',
-      timestamp: '2024-11-08T10:00:00.000Z',
+      timestamp: '2025-11-08T10:00:00.000Z',
       status: 'CREATED',
     };
 
@@ -285,12 +301,12 @@ describe('TeaTraceContract', () => {
     const batch: TeaBatch = {
       batchId,
       farmLocation: 'Moc Chau',
-      harvestDate: '2024-11-08',
+      harvestDate: '2025-11-08',
       processingInfo: 'Organic',
-      qualityCert: 'VN-ORG-2024',
+      qualityCert: 'VN-ORG-2025',
       hashValue: 'hash',
       owner: 'Org1MSP',
-      timestamp: '2024-11-08T10:00:00.000Z',
+      timestamp: '2025-11-08T10:00:00.000Z',
       status: 'CREATED',
     };
 
@@ -323,12 +339,12 @@ describe('TeaTraceContract', () => {
     const batch: TeaBatch = {
       batchId,
       farmLocation: 'Moc Chau',
-      harvestDate: '2024-11-08',
+      harvestDate: '2025-11-08',
       processingInfo: 'Organic',
-      qualityCert: 'VN-ORG-2024',
+      qualityCert: 'VN-ORG-2025',
       hashValue: 'hash',
       owner: 'Org1MSP',
-      timestamp: '2024-11-08T10:00:00.000Z',
+      timestamp: '2025-11-08T10:00:00.000Z',
       status: 'CREATED',
     };
 
