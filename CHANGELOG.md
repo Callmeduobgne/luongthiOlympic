@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Licenses**: Applied Apache 2.0 license headers to project files.
+- **Documentation**: Added system interface details to README.md.
+- **Data**: Added `data.json` for initial data seeding.
+
+### Changed
+- **Setup**: Updated `SETUP.md` with new clean scripts and instructions.
+- **Configuration**: Updated `fabric-ca-server` configuration.
+- **Identity**: Updated signup process.
+
+### Fixed
+- **Scripts**: Fixed `scripts/generate-crypto.sh` execution issues.
+- **Gateway**: Resolved `ibn-backend` gateway connection problems.
+- **Database**: Fixed schema compatibility and permission scripts.
+
 ## [1.2.0] - 2025-12-05
 
 ### Added
