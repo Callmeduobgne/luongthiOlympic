@@ -23,12 +23,6 @@
 
 **IBN Network (ICTU Blockchain Network)** là một hệ thống blockchain enterprise-grade được thiết kế để giải quyết bài toán **truy xuất nguồn gốc (traceability)** cho sản phẩm trà. Hệ thống sử dụng **Hyperledger Fabric** - một nền tảng blockchain permissioned phù hợp cho các ứng dụng doanh nghiệp yêu cầu tính riêng tư, hiệu suất cao và khả năng mở rộng.
 
-### Giao Diện Hệ Thống
-
-![IBN Tea - Giao diện truy xuất nguồn gốc](frontend/public/images2/Ảnh màn hình 2025-12-11 lúc 09.53.21.png)
-
-*Giao diện người dùng của hệ thống IBN Tea - Minh bạch từng bước trà, với công nghệ blockchain đảm bảo tính xác thực và truy xuất nguồn gốc 24/7.*
-
 
 1. **Truy Xuất Nguồn Gốc Toàn Diện**
    - Theo dõi toàn bộ lifecycle của sản phẩm trà từ nông trại đến người tiêu dùng
